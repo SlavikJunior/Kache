@@ -1,0 +1,17 @@
+.gradle/
+.idea/
+.kotlin/
+/build/
+local.properties
+*.iml
+*.DS_Store
+*/out/
+*/build/
+
+# IDE / OS мусор
+*.hprof
+.kotlin/sessions/
+
+# Артефакты публикации
+*.module
+
