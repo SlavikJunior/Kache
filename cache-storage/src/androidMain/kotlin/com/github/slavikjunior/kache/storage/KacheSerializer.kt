@@ -6,17 +6,15 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
 import kotlin.text.Charsets
 
-actual class StringSerializer : KacheSerializer<String> {
+public actual class StringSerializer : KacheSerializer<String> {
     override fun serialize(value: String): ByteArray = value.toByteArray(Charsets.UTF_8)
 
     override fun deserialize(bytes: ByteArray): String = String(bytes, Charsets.UTF_8)
 }
 
-actual class KotlinxJsonSerializer<T> actual constructor(
+public actual class KotlinxJsonSerializer<T> actual constructor(
     private val serializer: KSerializer<T>
 ) : KacheSerializer<T> {
-
-    private val json = Json {}
 
     override fun serialize(value: T): ByteArray {
         return try {
@@ -32,5 +30,10 @@ actual class KotlinxJsonSerializer<T> actual constructor(
         } catch (e: Exception) {
             throw KacheException.SerializationException(e)
         }
+    }
+
+    private companion object {
+        @Suppress("JSON_FORMAT_REDUNDANT")
+        val json = Json { }
     }
 }

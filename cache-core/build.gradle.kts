@@ -4,6 +4,9 @@ plugins {
 }
 
 kotlin {
+    // Enforce explicit visibility modifiers for all public API
+    explicitApi()
+
     jvm {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -28,7 +31,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(libs.kotlinx.coroutines.core)
+            // Flow<CacheResult<V>> is part of KmpCache public API
+            api(libs.kotlinx.coroutines.core)
+            
+            // Clock.System is used only internally by SystemTimeSource
             implementation(libs.kotlinx.datetime)
         }
 
