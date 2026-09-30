@@ -15,6 +15,10 @@ kotlin {
         namespace = "com.github.slavikjunior.kache.storage"
         compileSdk = 36
         minSdk = 23
+
+        withHostTestBuilder {}.configure {
+            isIncludeAndroidResources = false
+        }
     }
 
     sourceSets {
