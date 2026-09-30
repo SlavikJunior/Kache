@@ -22,8 +22,10 @@ Enterprise-grade Kotlin Multiplatform caching library with L1/L2 tiers and react
 |---|:---:|:---:|:---:|
 | `:cache-core` (L1 memory + abstractions) | ✅ | ✅ | ✅ |
 | `:cache-storage` (L2 file backend) | ✅ | ✅ | ❌ |
+| `:cache-store-room` (L2 Room/SQLite backend) | ✅ | ❌ | ❌ |
 
 > **Note**: iOS currently only supports L1 in-memory caching. L2 persistent storage for iOS is planned for Phase 4.
+> `:cache-store-room` is JVM-only for now; an Android build of the Room backend is planned for `:cache-android`.
 
 ## Installation
 
@@ -47,6 +49,11 @@ kotlin {
             implementation("com.github.slavikjunior.kache:cache-storage:0.1.0-SNAPSHOT")
         }
     }
+}
+
+// JVM only: Room/SQLite L2 backend
+dependencies {
+    implementation("com.github.slavikjunior.kache:cache-store-room:0.1.0-SNAPSHOT")
 }
 ```
 
@@ -146,7 +153,41 @@ cache.get("user:123", CacheStrategy.CacheFirst) {
 }.collect { /* ... */ }
 ```
 
-### 4. Strategies
+### 4. L2 Room/SQLite Cache (JVM)
+
+```kotlin
+import com.github.slavikjunior.kache.core.*
+import com.github.slavikjunior.kache.store.room.*
+import kotlinx.serialization.serializer
+
+// Bundled native SQLite: no external JDBC driver, no Android framework
+val engine: StorageEngine = RoomStorageEngineFactory.createFromFile("/var/data/kache.db")
+
+val cache = L2KmpCache(
+    storageEngine = engine,
+    valueSerializer = KotlinxJsonSerializer(serializer<User>()),
+    keyToString = { it },
+    defaultTtlMs = 24 * 60 * 60 * 1000,
+    timeSource = SystemTimeSource
+)
+
+// Expired records can be reaped in bulk
+val removed = engine.removeExpired(now = System.currentTimeMillis())
+```
+
+For full control over the Room configuration (migrations, callbacks, journal mode),
+build the database yourself and pass it in:
+
+```kotlin
+val db = Room.databaseBuilder<KacheDatabase>(name = "/var/data/kache.db")
+    .setDriver(BundledSQLiteDriver())
+    .fallbackToDestructiveMigration(dropAllTables = true)
+    .build()
+
+val engine = RoomStorageEngineFactory.create(db)
+```
+
+### 5. Strategies
 
 ```kotlin
 // CacheFirst: Use cached value if available, fetch on miss
@@ -164,7 +205,7 @@ cache.get(key, CacheStrategy.StaleWhileRevalidate, fetcher)
 // Expired record still returned as Success(data, DISK_STALE)
 ```
 
-### 5. Retry Policies
+### 6. Retry Policies
 
 ```kotlin
 // No retries (default)
@@ -179,7 +220,7 @@ RetryPolicy.aggressive()  // 5 attempts, 50ms initial
 RetryPolicy.fixed(attempts = 2, delayMs = 500)
 ```
 
-### 6. Testing with MutableTimeSource
+### 7. Testing with MutableTimeSource
 
 ```kotlin
 import com.github.slavikjunior.kache.core.*
@@ -219,6 +260,8 @@ fun `expired entries are not returned`() = runTest {
 └─────────┘  └─────────┘   └──────────┘
 ```
 
+`L2` is pluggable: `:cache-storage` ships a file backend, `:cache-store-room` a Room/SQLite backend.
+
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design.
 
 ## Documentation
@@ -227,7 +270,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design.
 - [Project Backlog](docs/BACKLOG.md)
 - [Core Domain Spec](docs/specs/01_core_domain_spec.md)
 - [L1 Memory Cache Spec](docs/specs/02_l1_memory_cache.md)
-- [KDoc API Reference](cache-core/build/dokka/html/index.html) (generate with `./gradlew dokkaGenerate`)
+- [KDoc API Reference](cache-core/build/dokka/html/index.html) (generate with `./gradlew dokkaGeneratePublicationHtml`; output is per module under `<module>/build/dokka/html/`)
 
 ## Building
 
@@ -241,16 +284,16 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design.
 # Publish to local Maven repo (build/repo)
 ./gradlew publishAllPublicationsToLocalRepository
 
-# Generate KDoc HTML
-./gradlew dokkaGenerate
+# Generate KDoc HTML (per module: <module>/build/dokka/html/)
+./gradlew dokkaGeneratePublicationHtml
 ```
 
 ## Roadmap
 
 - ✅ **Phase 1-3**: Core abstractions, L1 memory cache, strategy pipeline
-- ⏳ **Phase 4**: iOS L2 persistent storage, Room KMP backend
+- ⏳ **Phase 4**: L2 backends (✅ file, ✅ Room/SQLite on JVM, ⏳ Android Room, ⏳ iOS L2)
 - ⏳ **Phase 5**: Android KTX (ViewModel extensions, WorkManager sync)
-- ⏳ **Phase 6**: Library readiness (✅ API exposure, ✅ explicitApi, ✅ Maven Publish, ✅ Dokka, ⏳ BCV)
+- ✅ **Phase 6**: Library readiness (API exposure, explicitApi, Maven Publish, Dokka, BCV)
 - ⏳ **Phase 7**: AI SDLC metrics, article, conference talk
 
 See [`docs/BACKLOG.md`](docs/BACKLOG.md) for details.

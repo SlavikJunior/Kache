@@ -202,7 +202,12 @@ public abstract interface class com/github/slavikjunior/kache/core/StorageEngine
 	public abstract fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun put (Ljava/lang/String;Lcom/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/github/slavikjunior/kache/core/StorageEngine$DefaultImpls {
+	public static fun removeExpired (Lcom/github/slavikjunior/kache/core/StorageEngine;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class com/github/slavikjunior/kache/core/StorageRecord {

@@ -58,4 +58,19 @@ public interface StorageEngine {
      * @throws KacheException.DiskReadException if the storage cannot be read.
      */
     public suspend fun size(): Long
+
+    /**
+     * Removes all expired records from storage.
+     *
+     * A record is expired when `createdAt + ttlMillis < now`. Records with null TTL
+     * are never expired.
+     *
+     * Default implementation does nothing and returns 0 (no breaking change for existing backends).
+     *
+     * @param now Current epoch milliseconds. Implementations should use this value
+     *   instead of reading the system clock directly to ensure deterministic behavior in tests.
+     * @return The number of records removed, or 0 if the backend does not support this operation.
+     * @throws KacheException.DiskWriteException if the storage cannot be written.
+     */
+    public suspend fun removeExpired(now: Long): Long = 0L
 }

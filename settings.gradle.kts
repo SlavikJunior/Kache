@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 rootProject.name = "kache"
 include(":cache-core")
 include(":cache-storage")
+include(":cache-store-room")

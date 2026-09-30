@@ -9,10 +9,13 @@
 |---|---|---|
 | `:cache-core` | JVM, Android, iOS (arm64 / simulatorArm64 / x64) | Domain model, strategy pipeline, `L1MemoryCache`, `ChainKmpCache`, `L2KmpCache`, `StorageEngine` contract |
 | `:cache-storage` | JVM, Android | `FileStorageEngine` backend, record file codec, serializers |
+| `:cache-store-room` | JVM | `RoomStorageEngine` backend on Room 2.8.5 with the bundled native SQLite driver, `removeExpired` reaper |
 
-Layering rule: `:cache-core` owns *policy* (how a strategy behaves), `:cache-storage` owns *backends* (where bytes are kept). A cache cannot decide on its own where data lives, so a backend is always plugged in through `StorageEngine`.
+Layering rule: `:cache-core` owns *policy* (how a strategy behaves), the storage modules own *backends* (where bytes are kept). A cache cannot decide on its own where data lives, so a backend is always plugged in through `StorageEngine`.
 
-Known platform gap: `:cache-storage` has no iOS target, so on iOS only the L1 tier is available. Persistent storage on iOS is not implemented yet.
+Known platform gaps:
+- `:cache-storage` has no iOS target, so on iOS only the L1 tier is available. Persistent storage on iOS is not implemented yet.
+- `:cache-store-room` is JVM-only. Room is a KMP library, but the Android build needs a `Context`-based SQLite driver and the iOS build needs the native SQLite bundle, so the module is not a KMP module yet. The engine itself is written against the common `StorageEngine` contract, so adding the targets later is additive.
 
 ## Core Data Flow
 
@@ -69,6 +72,18 @@ TTL decisions never read the system clock directly. `TimeSource` is the single i
 `RetryPolicy.None` by default, so a fetcher runs exactly once. `RetryPolicy.Exponential` (or the `exponential()`, `aggressive()`, `fixed()` presets) adds exponential backoff with optional jitter. Coroutine cancellation is never retried and never reported as a network failure.
 
 ## Extension Points
-- `StorageEngine` — persistent backend contract; translate low-level failures into `DiskReadException` / `DiskWriteException`.
+- `StorageEngine` — persistent backend contract; translate low-level failures into `DiskReadException` / `DiskWriteException`. `removeExpired(now)` is optional: backends that cannot delete by predicate in bulk may keep the default no-op and return `0`.
 - `KacheSerializer<T>` — value (de)serialization; report failures as `SerializationException`.
 - `keyToString: (K) -> String` — required whenever `Any.toString()` is not a stable storage key (data classes with unstable `hashCode`, etc.).
+
+## L2 Backends
+
+Both shipped backends store the same [`StorageRecord`](cache-core/src/commonMain/kotlin/com/github/slavikjunior/kache/core/StorageRecord.kt) shape (serialized bytes + `createdAt` + `ttlMillis`), so strategies behave identically regardless of the backend.
+
+| | `:cache-storage` `FileStorageEngine` | `:cache-store-room` `RoomStorageEngine` |
+|---|---|---|
+| Layout | one file per key in a root directory | one `cache_entries` table keyed by `cache_key` |
+| Atomicity | temp file + atomic rename | ACID transaction, `OnConflictStrategy.REPLACE` |
+| Corruption | unparsable files are dropped on read | n/a (typed columns) |
+| `removeExpired` | default no-op | `DELETE … WHERE created_at + ttl_millis < :now` |
+| Concurrency | process-level file locks | SQLite WAL via the bundled driver |
