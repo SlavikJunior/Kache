@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jvm-android:
+    name: JVM + Android host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        # Gradle's daemon-JVM criteria in gradle/gradle-daemon-jvm.properties already
+        # provision a matching JDK through foojay, so only Gradle itself is set up here.
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+
+      # compileSdk 36 for the library modules and 37 for the Compose sample.
+      - name: Install Android platforms
+        run: sdkmanager "platforms;android-36" "platforms;android-37"
+
+      - name: Test JVM, Android host and iOS-simulator sources
+        run: ./gradlew check
+
+      - name: Verify binary compatibility
+        run: ./gradlew apiCheck
+
+      - name: Build and lint the sample
+        run: ./gradlew :sample-android:assembleDebug :sample-android:lintDebug
+
+  ios:
+    name: iOS compile, link and simulator tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # `check` alone does not prove the iOS artifacts link: iosX64Test is disabled on
+      # Apple Silicon and iosArm64Test needs a physical device. Compilation and linking
+      # are therefore verified explicitly, and the simulator suite is run on its own.
+      - name: Compile every iOS target
+        run: |
+          ./gradlew \
+            :cache-core:compileKotlinIosArm64 \
+            :cache-core:compileKotlinIosSimulatorArm64 \
+            :cache-core:compileKotlinIosX64 \
+            :cache-store-room:compileKotlinIosArm64 \
+            :cache-store-room:compileKotlinIosSimulatorArm64
+
+      - name: Link every iOS target
+        run: |
+          ./gradlew \
+            :cache-core:iosArm64MainBinaries \
+            :cache-core:iosSimulatorArm64MainBinaries \
+            :cache-core:iosX64MainBinaries \
+            :cache-store-room:iosArm64MainBinaries \
+            :cache-store-room:iosSimulatorArm64MainBinaries
+
+      - name: Run iOS simulator tests
+        run: ./gradlew :cache-core:iosSimulatorArm64Test :cache-store-room:iosSimulatorArm64Test
+
+      - name: Verify binary compatibility
+        run: ./gradlew apiCheck
+
+  publication:
+    name: Publish to the local Maven repository
+    # Runs on macOS because KMP iOS publications cannot be produced on Linux, and the
+    # goal here is to prove that *every* publication still builds and carries its
+    # javadoc and sources artifacts.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Dry run: everything lands in build/repo, nothing leaves the machine.
+      - name: Publish
+        run: ./gradlew publishAllPublicationsToLocalRepository
