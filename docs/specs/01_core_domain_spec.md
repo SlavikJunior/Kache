@@ -20,6 +20,7 @@
 - `DiskReadException(override val cause: Throwable)`
 - `DiskWriteException(override val cause: Throwable)`
 - `SerializationException(override val cause: Throwable)`
+- `CacheMissException(message: String)` — nothing cached and no fetcher provided
 - `ExpiredException(val key: Any)`
 - `UnknownKacheException(override val cause: Throwable)`
 
@@ -34,11 +35,11 @@
 - `CacheAndNetwork`
 - `StaleWhileRevalidate`
 
-### 5. `KmpCache<K : Any, V : Any>` (Interface)
+### 5. `KmpCache<K, V>` (Interface)
 ```kotlin
-interface KmpCache<K : Any Any, V> {
+interface KmpCache<K, V> {
     fun get(
-        key: K, 
+        key: K,
         strategy: CacheStrategy = CacheStrategy.CacheFirst,
         fetcher: (suspend (K) -> V)? = null
     ): Flow<CacheResult<V>>
@@ -47,3 +48,23 @@ interface KmpCache<K : Any Any, V> {
     suspend fun invalidate(key: K)
     suspend fun clear()
 }
+```
+
+Bounds note: `L1MemoryCache` and `ChainKmpCache` work with unbounded `K` and `V`. `L2KmpCache`
+requires `K : Any, V : Any` because a persisted record needs a stable string key and a
+serialized payload.
+
+### 6. `StorageEngine` (Interface)
+Replaces the `CacheStore` name from the first draft of this spec: the type stores records and
+nothing else, it does not serve reads. See `docs/ARCHITECTURE.md` for the layering rule that
+puts policy in `:cache-core` and backends in `:cache-storage`.
+
+```kotlin
+interface StorageEngine {
+    suspend fun get(key: String): StorageRecord<*>?
+    suspend fun put(key: String, record: StorageRecord<*>)
+    suspend fun remove(key: String): Boolean
+    suspend fun clear()
+    suspend fun size(): Long
+}
+```

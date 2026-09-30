@@ -25,3 +25,13 @@ Integrate L1 and L2 seamlessly:
     2. If Miss in L1, check L2 Storage -> If Hit, promote value to L1 and emit `Success(data, DISK)`.
     3. If Miss in L2, execute `fetcher` (Network) -> On Success, write to L2 + L1 and emit `Success(data, NETWORK)`.
 - Respect `CacheStrategy` (`CacheFirst`, `NetworkFirst`, `CacheAndNetwork`, `StaleWhileRevalidate`).
+
+## Implementation Status
+
+Superseded in part by the final design; kept for traceability.
+
+- TTL decisions go through the public `TimeSource` abstraction (`SystemTimeSource`, `MutableTimeSource`) instead of reading `Clock.System` directly.
+- Promotion from L2 to L1 uses the *remaining* TTL, never the original, so promoting a record cannot extend its lifetime.
+- Strategy logic is not implemented inside `ChainKmpCache`: it lives in the internal `CachePipeline`, which `ChainKmpCache` and `L2KmpCache` both delegate to. `CacheTier` (`ChainTier`, `StorageTier`) supplies the tier-specific read/write primitives, so a single-tier cache behaves identically to a two-tier one.
+- `defaultTtlMs` is also applied to `KmpCache.put(key, value)` when the caller gives no TTL.
+- Tag-based invalidation was descoped: see `docs/BACKLOG.md`, Phase 2.
