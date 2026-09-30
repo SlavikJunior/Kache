@@ -1,7 +1,7 @@
 package com.github.slavikjunior.kache.core
 
 import kotlin.concurrent.Volatile
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * Source of the current time, in milliseconds since the epoch.
