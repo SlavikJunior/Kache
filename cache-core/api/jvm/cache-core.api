@@ -1,0 +1,244 @@
+public final class com/github/slavikjunior/kache/core/CacheOrigin : java/lang/Enum {
+	public static final field DISK Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public static final field DISK_STALE Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public static final field MEMORY Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public static final field MEMORY_STALE Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public static final field NETWORK Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public static fun values ()[Lcom/github/slavikjunior/kache/core/CacheOrigin;
+}
+
+public abstract interface class com/github/slavikjunior/kache/core/CacheResult {
+}
+
+public final class com/github/slavikjunior/kache/core/CacheResult$Error : com/github/slavikjunior/kache/core/CacheResult {
+	public fun <init> (Lcom/github/slavikjunior/kache/core/KacheException;Ljava/lang/Object;)V
+	public synthetic fun <init> (Lcom/github/slavikjunior/kache/core/KacheException;Ljava/lang/Object;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/github/slavikjunior/kache/core/KacheException;
+	public final fun component2 ()Ljava/lang/Object;
+	public final fun copy (Lcom/github/slavikjunior/kache/core/KacheException;Ljava/lang/Object;)Lcom/github/slavikjunior/kache/core/CacheResult$Error;
+	public static synthetic fun copy$default (Lcom/github/slavikjunior/kache/core/CacheResult$Error;Lcom/github/slavikjunior/kache/core/KacheException;Ljava/lang/Object;ILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/CacheResult$Error;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCachedData ()Ljava/lang/Object;
+	public final fun getError ()Lcom/github/slavikjunior/kache/core/KacheException;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/slavikjunior/kache/core/CacheResult$Loading : com/github/slavikjunior/kache/core/CacheResult {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/Object;)V
+	public synthetic fun <init> (Ljava/lang/Object;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/Object;
+	public final fun copy (Ljava/lang/Object;)Lcom/github/slavikjunior/kache/core/CacheResult$Loading;
+	public static synthetic fun copy$default (Lcom/github/slavikjunior/kache/core/CacheResult$Loading;Ljava/lang/Object;ILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/CacheResult$Loading;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCachedData ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/slavikjunior/kache/core/CacheResult$Success : com/github/slavikjunior/kache/core/CacheResult {
+	public fun <init> (Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheOrigin;)V
+	public final fun component1 ()Ljava/lang/Object;
+	public final fun component2 ()Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public final fun copy (Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheOrigin;)Lcom/github/slavikjunior/kache/core/CacheResult$Success;
+	public static synthetic fun copy$default (Lcom/github/slavikjunior/kache/core/CacheResult$Success;Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheOrigin;ILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/CacheResult$Success;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getData ()Ljava/lang/Object;
+	public final fun getOrigin ()Lcom/github/slavikjunior/kache/core/CacheOrigin;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/slavikjunior/kache/core/CacheStrategy : java/lang/Enum {
+	public static final field CacheAndNetwork Lcom/github/slavikjunior/kache/core/CacheStrategy;
+	public static final field CacheFirst Lcom/github/slavikjunior/kache/core/CacheStrategy;
+	public static final field NetworkFirst Lcom/github/slavikjunior/kache/core/CacheStrategy;
+	public static final field StaleWhileRevalidate Lcom/github/slavikjunior/kache/core/CacheStrategy;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/github/slavikjunior/kache/core/CacheStrategy;
+	public static fun values ()[Lcom/github/slavikjunior/kache/core/CacheStrategy;
+}
+
+public final class com/github/slavikjunior/kache/core/ChainKmpCache : com/github/slavikjunior/kache/core/KmpCache {
+	public fun <init> (Lcom/github/slavikjunior/kache/core/L1MemoryCache;Lcom/github/slavikjunior/kache/core/StorageEngine;Lcom/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Ljava/lang/Long;Lcom/github/slavikjunior/kache/core/RetryPolicy;)V
+	public synthetic fun <init> (Lcom/github/slavikjunior/kache/core/L1MemoryCache;Lcom/github/slavikjunior/kache/core/StorageEngine;Lcom/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Ljava/lang/Long;Lcom/github/slavikjunior/kache/core/RetryPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun get (Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
+	public fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun put (Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract class com/github/slavikjunior/kache/core/KacheException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$CacheMissException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/String;)V
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$DiskReadException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/Throwable;)V
+	public fun getCause ()Ljava/lang/Throwable;
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$DiskWriteException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/Throwable;)V
+	public fun getCause ()Ljava/lang/Throwable;
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$ExpiredException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/Object;)V
+	public final fun getKey ()Ljava/lang/Object;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$NetworkException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/Throwable;)V
+	public fun getCause ()Ljava/lang/Throwable;
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$SerializationException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/Throwable;)V
+	public fun getCause ()Ljava/lang/Throwable;
+}
+
+public final class com/github/slavikjunior/kache/core/KacheException$UnknownKacheException : com/github/slavikjunior/kache/core/KacheException {
+	public fun <init> (Ljava/lang/Throwable;)V
+	public fun getCause ()Ljava/lang/Throwable;
+}
+
+public abstract interface class com/github/slavikjunior/kache/core/KacheSerializer {
+	public abstract fun deserialize ([B)Ljava/lang/Object;
+	public abstract fun serialize (Ljava/lang/Object;)[B
+}
+
+public abstract interface class com/github/slavikjunior/kache/core/KmpCache {
+	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun get (Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun get$default (Lcom/github/slavikjunior/kache/core/KmpCache;Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public abstract fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun put (Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun put$default (Lcom/github/slavikjunior/kache/core/KmpCache;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/github/slavikjunior/kache/core/KmpCache$DefaultImpls {
+	public static synthetic fun get$default (Lcom/github/slavikjunior/kache/core/KmpCache;Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun put$default (Lcom/github/slavikjunior/kache/core/KmpCache;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/github/slavikjunior/kache/core/L1MemoryCache {
+	public fun <init> (ILjava/lang/Long;Lcom/github/slavikjunior/kache/core/TimeSource;)V
+	public synthetic fun <init> (ILjava/lang/Long;Lcom/github/slavikjunior/kache/core/TimeSource;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun get (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getStale (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun put (Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun put$default (Lcom/github/slavikjunior/kache/core/L1MemoryCache;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun remove (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun removeExpired (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/github/slavikjunior/kache/core/L2KmpCache : com/github/slavikjunior/kache/core/KmpCache {
+	public fun <init> (Lcom/github/slavikjunior/kache/core/StorageEngine;Lcom/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Ljava/lang/Long;Lcom/github/slavikjunior/kache/core/TimeSource;Lcom/github/slavikjunior/kache/core/RetryPolicy;)V
+	public synthetic fun <init> (Lcom/github/slavikjunior/kache/core/StorageEngine;Lcom/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Ljava/lang/Long;Lcom/github/slavikjunior/kache/core/TimeSource;Lcom/github/slavikjunior/kache/core/RetryPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun get (Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
+	public fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun put (Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Long;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/github/slavikjunior/kache/core/MutableTimeSource : com/github/slavikjunior/kache/core/TimeSource {
+	public fun <init> ()V
+	public fun <init> (J)V
+	public synthetic fun <init> (JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun advance (J)V
+	public fun currentTimeMillis ()J
+	public final fun setTo (J)V
+}
+
+public abstract interface class com/github/slavikjunior/kache/core/RetryPolicy {
+	public static final field Companion Lcom/github/slavikjunior/kache/core/RetryPolicy$Companion;
+	public abstract fun delayAfter (I)J
+	public abstract fun shouldRetry (I)Z
+}
+
+public final class com/github/slavikjunior/kache/core/RetryPolicy$Companion {
+	public final fun aggressive ()Lcom/github/slavikjunior/kache/core/RetryPolicy$Exponential;
+	public final fun exponential ()Lcom/github/slavikjunior/kache/core/RetryPolicy$Exponential;
+	public final fun fixed (IJ)Lcom/github/slavikjunior/kache/core/RetryPolicy$Exponential;
+	public static synthetic fun fixed$default (Lcom/github/slavikjunior/kache/core/RetryPolicy$Companion;IJILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/RetryPolicy$Exponential;
+}
+
+public final class com/github/slavikjunior/kache/core/RetryPolicy$Exponential : com/github/slavikjunior/kache/core/RetryPolicy {
+	public fun <init> ()V
+	public fun <init> (IJJDDLkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (IJJDDLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun delayAfter (I)J
+	public final fun getInitialDelayMs ()J
+	public final fun getJitterRatio ()D
+	public final fun getMaxAttempts ()I
+	public final fun getMaxDelayMs ()J
+	public final fun getMultiplier ()D
+	public final fun getTotalAttempts ()I
+	public fun shouldRetry (I)Z
+}
+
+public final class com/github/slavikjunior/kache/core/RetryPolicy$None : com/github/slavikjunior/kache/core/RetryPolicy {
+	public static final field INSTANCE Lcom/github/slavikjunior/kache/core/RetryPolicy$None;
+	public fun delayAfter (I)J
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun shouldRetry (I)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/github/slavikjunior/kache/core/StorageEngine {
+	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun put (Ljava/lang/String;Lcom/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/github/slavikjunior/kache/core/StorageRecord {
+	public static final field Companion Lcom/github/slavikjunior/kache/core/StorageRecord$Companion;
+	public fun <init> (Ljava/lang/Object;[BJLjava/lang/Long;)V
+	public synthetic fun <init> (Ljava/lang/Object;[BJLjava/lang/Long;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/Object;
+	public final fun component2 ()[B
+	public final fun component3 ()J
+	public final fun component4 ()Ljava/lang/Long;
+	public final fun copy (Ljava/lang/Object;[BJLjava/lang/Long;)Lcom/github/slavikjunior/kache/core/StorageRecord;
+	public static synthetic fun copy$default (Lcom/github/slavikjunior/kache/core/StorageRecord;Ljava/lang/Object;[BJLjava/lang/Long;ILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/StorageRecord;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun expiresAt ()Ljava/lang/Long;
+	public final fun getCreatedAt ()J
+	public final fun getData ()[B
+	public final fun getTtlMillis ()Ljava/lang/Long;
+	public final fun getValue ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public final fun isExpired (J)Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/github/slavikjunior/kache/core/StorageRecord$Companion {
+	public final fun create (Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/KacheSerializer;JLjava/lang/Long;)Lcom/github/slavikjunior/kache/core/StorageRecord;
+	public static synthetic fun create$default (Lcom/github/slavikjunior/kache/core/StorageRecord$Companion;Ljava/lang/Object;Lcom/github/slavikjunior/kache/core/KacheSerializer;JLjava/lang/Long;ILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/StorageRecord;
+	public final fun fromData (Ljava/lang/Object;[BJLjava/lang/Long;)Lcom/github/slavikjunior/kache/core/StorageRecord;
+	public static synthetic fun fromData$default (Lcom/github/slavikjunior/kache/core/StorageRecord$Companion;Ljava/lang/Object;[BJLjava/lang/Long;ILjava/lang/Object;)Lcom/github/slavikjunior/kache/core/StorageRecord;
+}
+
+public final class com/github/slavikjunior/kache/core/SystemTimeSource : com/github/slavikjunior/kache/core/TimeSource {
+	public static final field INSTANCE Lcom/github/slavikjunior/kache/core/SystemTimeSource;
+	public fun currentTimeMillis ()J
+}
+
+public abstract interface class com/github/slavikjunior/kache/core/TimeSource {
+	public abstract fun currentTimeMillis ()J
+}
+
