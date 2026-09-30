@@ -88,7 +88,7 @@ public class L1MemoryCache<K, V>(
      * @return The value and its remaining TTL, or null if absent or expired.
      *   A null [L1CacheEntry.remainingTtlMs] means the entry never expires.
      */
-    public suspend fun getWithTtl(key: K): L1CacheEntry<V>? = mutex.withLock {
+    internal suspend fun getWithTtl(key: K): L1CacheEntry<V>? = mutex.withLock {
         val now = timeSource.currentTimeMillis()
         val entry = entries[key] ?: return@withLock null
 
@@ -206,7 +206,7 @@ public class L1MemoryCache<K, V>(
      * @param value The cached value.
      * @param remainingTtlMs Milliseconds until expiration, or null if the entry never expires.
      */
-    public data class L1CacheEntry<V>(
+    internal data class L1CacheEntry<V>(
         val value: V,
         val remainingTtlMs: Long?,
     )
