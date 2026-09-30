@@ -20,7 +20,7 @@ import java.nio.file.StandardCopyOption
  *
  * @param rootDirectory Directory holding the record files. Created if missing.
  */
-class FileStorageEngine(rootDirectory: String) : com.github.slavikjunior.kache.core.StorageEngine {
+public class FileStorageEngine(rootDirectory: String) : com.github.slavikjunior.kache.core.StorageEngine {
 
     private val rootDir: File = File(rootDirectory)
 

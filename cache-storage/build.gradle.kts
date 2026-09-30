@@ -5,6 +5,15 @@ plugins {
 }
 
 kotlin {
+    // Enforce explicit visibility modifiers for all public API
+    explicitApi()
+
+    // Suppress expect/actual classes Beta warning globally
+    @Suppress("OPT_IN_USAGE")
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     jvm {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -23,7 +32,10 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":cache-core"))
+            // FileStorageEngine implements StorageEngine, KacheSerializer is public
+            api(project(":cache-core"))
+            
+            // Coroutines inherited transitively from :cache-core, but prefer explicit declaration
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
