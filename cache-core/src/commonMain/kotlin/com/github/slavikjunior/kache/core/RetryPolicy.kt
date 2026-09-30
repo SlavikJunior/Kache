@@ -11,8 +11,28 @@ import kotlin.math.pow
  */
 public sealed interface RetryPolicy {
 
+    /**
+     * Whether another attempt is permitted after [completedAttempts] attempts.
+     *
+     * @param completedAttempts Number of attempts already made, at least 0.
+     * @return true when the failed attempt should be followed by another one.
+     */
+    public fun shouldRetry(completedAttempts: Int): Boolean
+
+    /**
+     * Delay before the retry that follows [completedAttempts] completed attempts.
+     *
+     * @param completedAttempts Number of attempts already made, at least 1.
+     * @return Delay in milliseconds. Never negative; 0 means "retry immediately".
+     */
+    public fun delayAfter(completedAttempts: Int): Long
+
     /** No retries. The initial failure is reported immediately. */
-    public data object None : RetryPolicy
+    public data object None : RetryPolicy {
+        override fun shouldRetry(completedAttempts: Int): Boolean = false
+
+        override fun delayAfter(completedAttempts: Int): Long = 0L
+    }
 
     /**
      * Retries with exponential backoff and optional jitter.
@@ -54,17 +74,9 @@ public sealed interface RetryPolicy {
         /** Total number of attempts, including the initial one. */
         public val totalAttempts: Int get() = maxAttempts + 1
 
-        /** Whether another attempt is permitted after [completedAttempts] attempts. */
-        public fun shouldRetry(completedAttempts: Int): Boolean = completedAttempts <= maxAttempts
+        override fun shouldRetry(completedAttempts: Int): Boolean = completedAttempts <= maxAttempts
 
-        /**
-         * Delay before the retry that follows [completedAttempts] completed attempts.
-         *
-         * @param completedAttempts Number of attempts already made. Must be at least 1.
-         * @return Delay in milliseconds, never above [maxDelayMs] and never negative.
-         * @throws IllegalArgumentException if [completedAttempts] is less than 1.
-         */
-        public fun delayAfter(completedAttempts: Int): Long {
+        override fun delayAfter(completedAttempts: Int): Long {
             require(completedAttempts >= 1) {
                 "completedAttempts must be >= 1, but was $completedAttempts"
             }

@@ -18,6 +18,12 @@ kotlin {
         namespace = "com.github.slavikjunior.kache.core"
         compileSdk = 36
         minSdk = 23
+
+        // Without a host test builder the Android target contributes no unit test
+        // compilation, so commonTest would only be verified on JVM and iOS.
+        withHostTestBuilder {}.configure {
+            isIncludeAndroidResources = false
+        }
     }
 
     sourceSets {

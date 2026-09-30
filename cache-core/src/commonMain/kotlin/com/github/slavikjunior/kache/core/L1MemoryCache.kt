@@ -2,7 +2,6 @@ package com.github.slavikjunior.kache.core
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.Clock
 
 /**
  * Thread-safe in-memory cache with LRU eviction and optional TTL.
@@ -15,14 +14,15 @@ import kotlinx.datetime.Clock
  * @param maxSize Maximum number of entries before eviction triggers. Must be positive.
  * @param defaultTtlMs Default TTL in milliseconds applied by [put] when no TTL is given.
  *   Null means entries do not expire.
- * @param timeSource Clock used for TTL decisions. Injectable for deterministic tests.
+ * @param timeSource Clock used for TTL decisions. Inject [MutableTimeSource] in tests,
+ *   or pass a source shared with the cache pipeline to keep both tiers on one clock.
  *
  * @throws IllegalArgumentException if [maxSize] is not positive.
  */
 public class L1MemoryCache<K, V>(
     private val maxSize: Int,
     private val defaultTtlMs: Long? = null,
-    private val timeSource: TimeSource = SystemTimeSource,
+    internal val timeSource: TimeSource = SystemTimeSource,
 ) {
     init {
         require(maxSize > 0) { "maxSize must be positive, but was $maxSize" }
@@ -180,9 +180,6 @@ public class L1MemoryCache<K, V>(
         accessOrder.firstOrNull()?.let { removeEntry(it) }
     }
 
-    /** The current time according to the configured [timeSource]. */
-    internal fun currentTimeMillis(): Long = timeSource.currentTimeMillis()
-
     /**
      * Internal record shape. Kept private so that TTL bookkeeping cannot be
      * constructed or mutated from outside the cache.
@@ -213,16 +210,4 @@ public class L1MemoryCache<K, V>(
         val value: V,
         val remainingTtlMs: Long?,
     )
-
-    /**
-     * Source of the current time. Abstracted so tests can control TTL deterministically.
-     */
-    public fun interface TimeSource {
-        public fun currentTimeMillis(): Long
-    }
-
-    /** [TimeSource] backed by the system clock. */
-    public object SystemTimeSource : TimeSource {
-        override fun currentTimeMillis(): Long = Clock.System.now().toEpochMilliseconds()
-    }
 }

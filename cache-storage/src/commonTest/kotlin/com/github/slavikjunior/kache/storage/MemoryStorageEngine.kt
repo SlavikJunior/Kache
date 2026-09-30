@@ -1,36 +1,42 @@
 package com.github.slavikjunior.kache.storage
 
-import com.github.slavikjunior.kache.core.KacheException
+import com.github.slavikjunior.kache.core.StorageEngine
 import com.github.slavikjunior.kache.core.StorageRecord
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * In-memory implementation of [StorageEngine] for testing purposes.
- * Thread-safe and supports all StorageEngine operations.
+ * In-memory [StorageEngine] used as a test double for the persistent tier.
+ *
+ * Records are stored by reference rather than as they would be on disk, so a test that
+ * needs to observe what the cache really wrote has to go through the codec itself.
+ * This is sufficient for exercising strategy logic, which is what the common tests
+ * use it for.
+ *
+ * Thread-safe, mirroring the guarantees a real backend is expected to provide.
  */
-public class MemoryStorageEngine : StorageEngine {
+internal class MemoryStorageEngine : StorageEngine {
 
-    private val data = mutableMapOf<String, StorageRecord>()
+    private val records = mutableMapOf<String, StorageRecord<*>>()
     private val mutex = Mutex()
 
-    override suspend fun get(key: String): StorageRecord? = mutex.withLock {
-        data[key]
+    override suspend fun get(key: String): StorageRecord<*>? = mutex.withLock {
+        records[key]
     }
 
-    override suspend fun put(key: String, record: StorageRecord) = mutex.withLock {
-        data[key] = record
+    override suspend fun put(key: String, record: StorageRecord<*>) = mutex.withLock {
+        records[key] = record
     }
 
     override suspend fun remove(key: String): Boolean = mutex.withLock {
-        data.remove(key) != null
+        records.remove(key) != null
     }
 
     override suspend fun clear() = mutex.withLock {
-        data.clear()
+        records.clear()
     }
 
     override suspend fun size(): Long = mutex.withLock {
-        data.size.toLong()
+        records.size.toLong()
     }
 }
