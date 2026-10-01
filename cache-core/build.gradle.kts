@@ -20,7 +20,7 @@ kotlin {
     iosX64()
 
     android {
-        namespace = "com.github.slavikjunior.kache.core"
+        namespace = "io.github.slavikjunior.kache.core"
         compileSdk = 36
         minSdk = 23
 

@@ -10,12 +10,6 @@ kotlin {
     // Enforce explicit visibility modifiers for all public API
     explicitApi()
 
-    // Suppress expect/actual classes Beta warning globally
-    @Suppress("OPT_IN_USAGE")
-    compilerOptions {
-        freeCompilerArgs.add("-Xexpect-actual-classes")
-    }
-
     jvm {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
@@ -23,7 +17,7 @@ kotlin {
     }
 
     android {
-        namespace = "com.github.slavikjunior.kache.storage"
+        namespace = "io.github.slavikjunior.kache.storage"
         compileSdk = 36
         minSdk = 23
 
@@ -33,6 +27,14 @@ kotlin {
     }
 
     sourceSets {
+        // JVM and Android both use java.io, so FileStorageEngine is implemented once
+        // in a source set shared by the two targets instead of being duplicated.
+        val jvmCommonMain by creating {
+            dependsOn(commonMain.get())
+        }
+        jvmMain.get().dependsOn(jvmCommonMain)
+        androidMain.get().dependsOn(jvmCommonMain)
+
         commonMain.dependencies {
             // FileStorageEngine implements StorageEngine, KacheSerializer is public
             api(project(":cache-core"))
