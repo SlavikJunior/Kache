@@ -1,76 +1,223 @@
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.publish.PublishingExtension
 import org.gradle.api.publish.maven.MavenPublication
+import org.gradle.api.tasks.TaskProvider
+import org.gradle.api.tasks.bundling.Jar
 import org.gradle.kotlin.dsl.configure
-import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.get
+import org.gradle.kotlin.dsl.named
+import org.gradle.kotlin.dsl.register
 import org.gradle.plugins.signing.SigningExtension
 
 /**
  * Convention plugin that configures Maven publishing for Kache modules.
- * 
- * Reads metadata from gradle.properties and creates publications for all
- * KMP targets (JVM, Android, iOS).
+ *
+ * Reads metadata from `gradle.properties` and configures every [MavenPublication]
+ * created in the module — the per-target publications auto-created by the Kotlin
+ * Multiplatform plugin, and the explicit `maven` publication of the plain-JVM
+ * `:cache-store-room` module.
+ *
+ * Adds:
+ * - `dokkaJar` — a `javadoc`-classified JAR packaging the Dokka HTML output.
+ *   Maven Central requires a Javadoc artifact per publication and the Dokka plugin
+ *   does not create one on its own.
+ * - a sources JAR for `:cache-store-room`, which the Kotlin Multiplatform plugin
+ *   would otherwise provide as per-target jars. KMP modules already attach
+ *   `jvmSourcesJar`/`androidSourcesJar`/`ios*SourcesJar` themselves, so their
+ *   publications are left untouched.
+ *
+ * Signing is controlled by `SIGNING_KEY` and `SIGNING_PASSWORD` (Gradle properties
+ * or environment variables). When either is absent, signing is not required, which
+ * keeps local builds working. Both must be set to publish to Maven Central.
  */
 class KachePublishConventionPlugin : Plugin<Project> {
-    override fun apply(target: Project) {
-        with(target) {
-            pluginManager.apply("maven-publish")
-            pluginManager.apply("signing")
 
-            val GROUP = findProperty("GROUP") as String
-            val VERSION_NAME = findProperty("VERSION_NAME") as String
+    /** Whether a Maven Central target was configured; gates the mandatory signing check. */
+    private var publishToCentral: Boolean = false
 
-            group = GROUP
-            version = VERSION_NAME
+    override fun apply(target: Project): Unit = with(target) {
+        pluginManager.apply("maven-publish")
+        pluginManager.apply("signing")
 
-            extensions.configure<PublishingExtension> {
-                publications.configureEach {
-                    if (this is MavenPublication) {
-                        pom {
-                            name.set(project.name)
-                            description.set(findProperty("POM_DESCRIPTION") as String)
-                            url.set(findProperty("POM_URL") as String)
+        group = findProperty("GROUP") as String
+        version = findProperty("VERSION_NAME") as String
 
-                            licenses {
-                                license {
-                                    name.set(findProperty("POM_LICENCE_NAME") as String)
-                                    url.set(findProperty("POM_LICENCE_URL") as String)
-                                    distribution.set(findProperty("POM_LICENCE_DIST") as String)
-                                }
-                            }
+        // Registered once per module: calling this from inside the
+        // publications loop would attempt to re-register the same task name.
+        val dokkaJar = registerDokkaJar()
 
-                            developers {
-                                developer {
-                                    id.set(findProperty("POM_DEVELOPER_ID") as String)
-                                    name.set(findProperty("POM_DEVELOPER_NAME") as String)
-                                }
-                            }
+        // Resolved here, in Project scope: inside the publishing block the receiver is
+        // RepositoryHandler, not Project.
+        val centralUsername = centralUsername()
+        val centralPassword = centralPassword()
+        publishToCentral = !centralUsername.isNullOrBlank() && !centralPassword.isNullOrBlank()
 
-                            scm {
-                                url.set(findProperty("POM_SCM_URL") as String)
-                                connection.set(findProperty("POM_SCM_CONNECTION") as String)
-                                developerConnection.set(findProperty("POM_SCM_DEV_CONNECTION") as String)
-                            }
+        extensions.configure<PublishingExtension> {
+            publications.configureEach {
+                if (this !is MavenPublication) return@configureEach
+
+                pom {
+                    name.set(project.name)
+                    description.set(findProperty("POM_DESCRIPTION") as String)
+                    url.set(findProperty("POM_URL") as String)
+
+                    licenses {
+                        license {
+                            name.set(findProperty("POM_LICENCE_NAME") as String)
+                            url.set(findProperty("POM_LICENCE_URL") as String)
+                            distribution.set(findProperty("POM_LICENCE_DIST") as String)
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id.set(findProperty("POM_DEVELOPER_ID") as String)
+                            name.set(findProperty("POM_DEVELOPER_NAME") as String)
+                        }
+                    }
+
+                    scm {
+                        url.set(findProperty("POM_SCM_URL") as String)
+                        connection.set(findProperty("POM_SCM_CONNECTION") as String)
+                        developerConnection.set(findProperty("POM_SCM_DEV_CONNECTION") as String)
+                    }
+                }
+
+                artifact(dokkaJar)
+
+                // Per-target sources jars come from the Kotlin Multiplatform plugin;
+                // only plain-JVM modules need one attached here.
+                plainJvmSourcesJar()?.let { artifact(it) }
+            }
+
+            repositories {
+                // Always available dry-run target. Nothing leaves the machine through
+                // this repository, which is what makes it usable as the CI gate.
+                maven {
+                    name = LOCAL_REPOSITORY_NAME
+                    url = uri(rootProject.layout.buildDirectory.dir("repo"))
+                }
+
+                // Maven Central Publisher Portal. Registered only when credentials are
+                // present so that ordinary local builds never need them.
+                //
+                // There is no official Gradle plugin for the Portal, so this uses the
+                // Portal's OSSRH-compatible Staging API. A deployment started this way
+                // still has to be closed/activated in the Portal UI afterwards; see
+                // docs/specs/03_platform_coverage_and_release_spec.md.
+                if (publishToCentral) {
+                    maven {
+                        name = CENTRAL_REPOSITORY_NAME
+                        url = uri(CENTRAL_STAGING_URL)
+                        credentials {
+                            username = centralUsername
+                            password = centralPassword
                         }
                     }
                 }
-
-                repositories {
-                    maven {
-                        name = "local"
-                        url = uri(rootProject.layout.buildDirectory.dir("repo"))
-                    }
-                }
-            }
-
-            // Signing is optional for snapshots
-            if (!VERSION_NAME.endsWith("SNAPSHOT")) {
-                extensions.configure<SigningExtension> {
-                    sign(extensions.getByType(PublishingExtension::class.java).publications)
-                }
             }
         }
+
+        configureSigning()
     }
+
+    /** Dokka HTML output packaged as the `javadoc` artifact. */
+    private fun Project.registerDokkaJar(): TaskProvider<Jar> {
+        if (tasks.names.contains(DOKKA_JAR_TASK)) {
+            return tasks.named(DOKKA_JAR_TASK, Jar::class.java)
+        }
+
+        return tasks.register(DOKKA_JAR_TASK, Jar::class.java) {
+            archiveClassifier.set("javadoc")
+            from(layout.buildDirectory.dir(DOKKA_OUTPUT_DIR))
+            // The Dokka task name varies across plugin variants, so depend on all
+            // of them rather than on a specific task type.
+            dependsOn(tasks.matching { it.name in DOKKA_TASK_NAMES })
+        }
+    }
+
+    /**
+     * Sources JAR of a plain-JVM module, named `kotlinSourcesJar` by the Kotlin
+     * plugin. Returns null for KMP modules, which attach per-target sources jars.
+     */
+    private fun Project.plainJvmSourcesJar(): TaskProvider<Task>? =
+        if (tasks.names.contains(KMP_SOURCES_MARKER)) {
+            null
+        } else if (tasks.names.contains(SOURCES_JAR_TASK)) {
+            tasks.named(SOURCES_JAR_TASK)
+        } else {
+            null
+        }
+
+    private fun Project.configureSigning() {
+        val signingKey = providers.gradleProperty(SIGNING_KEY_PROPERTY).orNull
+            ?: System.getenv(SIGNING_KEY_PROPERTY)
+        val signingPassword = providers.gradleProperty(SIGNING_PASSWORD_PROPERTY).orNull
+            ?: System.getenv(SIGNING_PASSWORD_PROPERTY)
+        val hasCredentials = !signingKey.isNullOrBlank() && !signingPassword.isNullOrBlank()
+
+        // Maven Central rejects unsigned artifacts. Publishing there without signing
+        // credentials must fail loudly instead of quietly producing artifacts that the
+        // repository will refuse, so the release is caught before it starts.
+        if (publishToCentral && !hasCredentials) {
+            throw GradleException(
+                "Publishing to Maven Central requires $SIGNING_KEY_PROPERTY and " +
+                    "$SIGNING_PASSWORD_PROPERTY. Both are missing, and Central does not " +
+                    "accept unsigned artifacts. Export them, or unset " +
+                    "$CENTRAL_USERNAME_PROPERTY/$CENTRAL_PASSWORD_PROPERTY to publish " +
+                    "locally only."
+            )
+        }
+
+        val signing = extensions.getByType(SigningExtension::class.java)
+        signing.setRequired(hasCredentials)
+        signing.sign(extensions.getByType(PublishingExtension::class.java).publications)
+        signing.useInMemoryPgpKeys(signingKey, signingPassword)
+    }
+
+    private companion object {
+        /** Present only in KMP modules, where per-target sources jars are attached automatically. */
+        const val KMP_SOURCES_MARKER = "jvmSourcesJar"
+
+        /** Kotlin plugin names the sources jar `kotlinSourcesJar` on plain-JVM modules. */
+        const val SOURCES_JAR_TASK = "kotlinSourcesJar"
+
+        const val DOKKA_JAR_TASK = "dokkaJar"
+        const val DOKKA_OUTPUT_DIR = "dokka/html"
+
+        /** Dokka V2 tasks that produce the HTML output under `build/dokka/html`. */
+        val DOKKA_TASK_NAMES = setOf(
+            "dokkaGeneratePublicationHtml",
+            "dokkaGenerateModuleHtml",
+            "dokkaGenerateHtml",
+            "dokkaGenerate",
+        )
+
+        const val SIGNING_KEY_PROPERTY = "SIGNING_KEY"
+        const val SIGNING_PASSWORD_PROPERTY = "SIGNING_PASSWORD"
+
+        const val LOCAL_REPOSITORY_NAME = "local"
+        const val CENTRAL_REPOSITORY_NAME = "central-portal-staging"
+
+        /**
+         * Portal OSSRH-compatible Staging API. Credentials must be a Central Portal User
+         * Token, not a legacy OSSRH token — an OSSRH token yields 401.
+         */
+        const val CENTRAL_STAGING_URL =
+            "https://ossrh-staging-api.central.sonatype.com/service/local/staging/deploy/maven2/"
+
+        const val CENTRAL_USERNAME_PROPERTY = "CENTRAL_USERNAME"
+        const val CENTRAL_PASSWORD_PROPERTY = "CENTRAL_PASSWORD"
+    }
+
+    private fun Project.centralUsername(): String? =
+        providers.gradleProperty(CENTRAL_USERNAME_PROPERTY).orNull
+            ?: System.getenv(CENTRAL_USERNAME_PROPERTY)
+
+    private fun Project.centralPassword(): String? =
+        providers.gradleProperty(CENTRAL_PASSWORD_PROPERTY).orNull
+            ?: System.getenv(CENTRAL_PASSWORD_PROPERTY)
 }
