@@ -1,20 +1,20 @@
-public final class com/github/slavikjunior/kache/storage/FileStorageEngine : com/github/slavikjunior/kache/core/StorageEngine {
+public final class io/github/slavikjunior/kache/storage/FileStorageEngine : io/github/slavikjunior/kache/core/StorageEngine {
 	public fun <init> (Ljava/lang/String;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-	public fun put (Ljava/lang/String;Lcom/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun put (Ljava/lang/String;Lio/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
-public final class com/github/slavikjunior/kache/storage/KotlinxJsonSerializer : com/github/slavikjunior/kache/core/KacheSerializer {
+public final class io/github/slavikjunior/kache/storage/KotlinxJsonSerializer : io/github/slavikjunior/kache/core/KacheSerializer {
 	public fun <init> (Lkotlinx/serialization/KSerializer;)V
 	public fun deserialize ([B)Ljava/lang/Object;
 	public fun serialize (Ljava/lang/Object;)[B
 }
 
-public final class com/github/slavikjunior/kache/storage/StringSerializer : com/github/slavikjunior/kache/core/KacheSerializer {
+public final class io/github/slavikjunior/kache/storage/StringSerializer : io/github/slavikjunior/kache/core/KacheSerializer {
 	public fun <init> ()V
 	public synthetic fun deserialize ([B)Ljava/lang/Object;
 	public fun deserialize ([B)Ljava/lang/String;
