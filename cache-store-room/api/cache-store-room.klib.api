@@ -1,0 +1,86 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.slavikjunior.kache:cache-store-room>
+abstract interface io.github.slavikjunior.kache.store.room/CacheEntryDao { // io.github.slavikjunior.kache.store.room/CacheEntryDao|null[0]
+    abstract suspend fun clear(): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryDao.clear|clear(){}[0]
+    abstract suspend fun count(): kotlin/Long // io.github.slavikjunior.kache.store.room/CacheEntryDao.count|count(){}[0]
+    abstract suspend fun get(kotlin/String): io.github.slavikjunior.kache.store.room/CacheEntryEntity? // io.github.slavikjunior.kache.store.room/CacheEntryDao.get|get(kotlin.String){}[0]
+    abstract suspend fun put(io.github.slavikjunior.kache.store.room/CacheEntryEntity): kotlin/Long // io.github.slavikjunior.kache.store.room/CacheEntryDao.put|put(io.github.slavikjunior.kache.store.room.CacheEntryEntity){}[0]
+    abstract suspend fun remove(kotlin/String): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryDao.remove|remove(kotlin.String){}[0]
+    abstract suspend fun removeExpired(kotlin/Long): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryDao.removeExpired|removeExpired(kotlin.Long){}[0]
+}
+
+abstract class io.github.slavikjunior.kache.store.room/KacheDatabase : androidx.room/RoomDatabase { // io.github.slavikjunior.kache.store.room/KacheDatabase|null[0]
+    constructor <init>() // io.github.slavikjunior.kache.store.room/KacheDatabase.<init>|<init>(){}[0]
+
+    abstract fun cacheEntryDao(): io.github.slavikjunior.kache.store.room/CacheEntryDao // io.github.slavikjunior.kache.store.room/KacheDatabase.cacheEntryDao|cacheEntryDao(){}[0]
+}
+
+final class io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl : io.github.slavikjunior.kache.store.room/CacheEntryDao { // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl|null[0]
+    constructor <init>(androidx.room/RoomDatabase) // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.<init>|<init>(androidx.room.RoomDatabase){}[0]
+
+    final suspend fun clear(): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.clear|clear(){}[0]
+    final suspend fun count(): kotlin/Long // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.count|count(){}[0]
+    final suspend fun get(kotlin/String): io.github.slavikjunior.kache.store.room/CacheEntryEntity? // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.get|get(kotlin.String){}[0]
+    final suspend fun put(io.github.slavikjunior.kache.store.room/CacheEntryEntity): kotlin/Long // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.put|put(io.github.slavikjunior.kache.store.room.CacheEntryEntity){}[0]
+    final suspend fun remove(kotlin/String): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.remove|remove(kotlin.String){}[0]
+    final suspend fun removeExpired(kotlin/Long): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.removeExpired|removeExpired(kotlin.Long){}[0]
+
+    final object Companion { // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.Companion|null[0]
+        final fun getRequiredConverters(): kotlin.collections/List<kotlin.reflect/KClass<*>> // io.github.slavikjunior.kache.store.room/CacheEntryDao_Impl.Companion.getRequiredConverters|getRequiredConverters(){}[0]
+    }
+}
+
+final class io.github.slavikjunior.kache.store.room/CacheEntryEntity { // io.github.slavikjunior.kache.store.room/CacheEntryEntity|null[0]
+    constructor <init>(kotlin/String, kotlin/ByteArray, kotlin/Long, kotlin/Long?) // io.github.slavikjunior.kache.store.room/CacheEntryEntity.<init>|<init>(kotlin.String;kotlin.ByteArray;kotlin.Long;kotlin.Long?){}[0]
+
+    final val cacheKey // io.github.slavikjunior.kache.store.room/CacheEntryEntity.cacheKey|{}cacheKey[0]
+        final fun <get-cacheKey>(): kotlin/String // io.github.slavikjunior.kache.store.room/CacheEntryEntity.cacheKey.<get-cacheKey>|<get-cacheKey>(){}[0]
+    final val createdAt // io.github.slavikjunior.kache.store.room/CacheEntryEntity.createdAt|{}createdAt[0]
+        final fun <get-createdAt>(): kotlin/Long // io.github.slavikjunior.kache.store.room/CacheEntryEntity.createdAt.<get-createdAt>|<get-createdAt>(){}[0]
+    final val data // io.github.slavikjunior.kache.store.room/CacheEntryEntity.data|{}data[0]
+        final fun <get-data>(): kotlin/ByteArray // io.github.slavikjunior.kache.store.room/CacheEntryEntity.data.<get-data>|<get-data>(){}[0]
+    final val ttlMillis // io.github.slavikjunior.kache.store.room/CacheEntryEntity.ttlMillis|{}ttlMillis[0]
+        final fun <get-ttlMillis>(): kotlin/Long? // io.github.slavikjunior.kache.store.room/CacheEntryEntity.ttlMillis.<get-ttlMillis>|<get-ttlMillis>(){}[0]
+
+    final fun component1(): kotlin/String // io.github.slavikjunior.kache.store.room/CacheEntryEntity.component1|component1(){}[0]
+    final fun component2(): kotlin/ByteArray // io.github.slavikjunior.kache.store.room/CacheEntryEntity.component2|component2(){}[0]
+    final fun component3(): kotlin/Long // io.github.slavikjunior.kache.store.room/CacheEntryEntity.component3|component3(){}[0]
+    final fun component4(): kotlin/Long? // io.github.slavikjunior.kache.store.room/CacheEntryEntity.component4|component4(){}[0]
+    final fun copy(kotlin/String = ..., kotlin/ByteArray = ..., kotlin/Long = ..., kotlin/Long? = ...): io.github.slavikjunior.kache.store.room/CacheEntryEntity // io.github.slavikjunior.kache.store.room/CacheEntryEntity.copy|copy(kotlin.String;kotlin.ByteArray;kotlin.Long;kotlin.Long?){}[0]
+    final fun equals(kotlin/Any?): kotlin/Boolean // io.github.slavikjunior.kache.store.room/CacheEntryEntity.equals|equals(kotlin.Any?){}[0]
+    final fun hashCode(): kotlin/Int // io.github.slavikjunior.kache.store.room/CacheEntryEntity.hashCode|hashCode(){}[0]
+    final fun toString(): kotlin/String // io.github.slavikjunior.kache.store.room/CacheEntryEntity.toString|toString(){}[0]
+}
+
+final class io.github.slavikjunior.kache.store.room/KacheDatabase_Impl : io.github.slavikjunior.kache.store.room/KacheDatabase { // io.github.slavikjunior.kache.store.room/KacheDatabase_Impl|null[0]
+    constructor <init>() // io.github.slavikjunior.kache.store.room/KacheDatabase_Impl.<init>|<init>(){}[0]
+
+    final fun cacheEntryDao(): io.github.slavikjunior.kache.store.room/CacheEntryDao // io.github.slavikjunior.kache.store.room/KacheDatabase_Impl.cacheEntryDao|cacheEntryDao(){}[0]
+    final fun createAutoMigrations(kotlin.collections/Map<kotlin.reflect/KClass<out androidx.room.migration/AutoMigrationSpec>, androidx.room.migration/AutoMigrationSpec>): kotlin.collections/List<androidx.room.migration/Migration> // io.github.slavikjunior.kache.store.room/KacheDatabase_Impl.createAutoMigrations|createAutoMigrations(kotlin.collections.Map<kotlin.reflect.KClass<out|androidx.room.migration.AutoMigrationSpec>,androidx.room.migration.AutoMigrationSpec>){}[0]
+    final fun getRequiredAutoMigrationSpecClasses(): kotlin.collections/Set<kotlin.reflect/KClass<out androidx.room.migration/AutoMigrationSpec>> // io.github.slavikjunior.kache.store.room/KacheDatabase_Impl.getRequiredAutoMigrationSpecClasses|getRequiredAutoMigrationSpecClasses(){}[0]
+}
+
+final class io.github.slavikjunior.kache.store.room/RoomStorageEngine : io.github.slavikjunior.kache.core/StorageEngine { // io.github.slavikjunior.kache.store.room/RoomStorageEngine|null[0]
+    final suspend fun clear() // io.github.slavikjunior.kache.store.room/RoomStorageEngine.clear|clear(){}[0]
+    final suspend fun get(kotlin/String): io.github.slavikjunior.kache.core/StorageRecord<*>? // io.github.slavikjunior.kache.store.room/RoomStorageEngine.get|get(kotlin.String){}[0]
+    final suspend fun put(kotlin/String, io.github.slavikjunior.kache.core/StorageRecord<*>) // io.github.slavikjunior.kache.store.room/RoomStorageEngine.put|put(kotlin.String;io.github.slavikjunior.kache.core.StorageRecord<*>){}[0]
+    final suspend fun remove(kotlin/String): kotlin/Boolean // io.github.slavikjunior.kache.store.room/RoomStorageEngine.remove|remove(kotlin.String){}[0]
+    final suspend fun removeExpired(kotlin/Long): kotlin/Long // io.github.slavikjunior.kache.store.room/RoomStorageEngine.removeExpired|removeExpired(kotlin.Long){}[0]
+    final suspend fun size(): kotlin/Long // io.github.slavikjunior.kache.store.room/RoomStorageEngine.size|size(){}[0]
+}
+
+final object io.github.slavikjunior.kache.store.room/KacheDatabaseConstructor : androidx.room/RoomDatabaseConstructor<io.github.slavikjunior.kache.store.room/KacheDatabase> { // io.github.slavikjunior.kache.store.room/KacheDatabaseConstructor|null[0]
+    final fun initialize(): io.github.slavikjunior.kache.store.room/KacheDatabase // io.github.slavikjunior.kache.store.room/KacheDatabaseConstructor.initialize|initialize(){}[0]
+}
+
+final object io.github.slavikjunior.kache.store.room/RoomStorageEngineFactory { // io.github.slavikjunior.kache.store.room/RoomStorageEngineFactory|null[0]
+    final fun create(io.github.slavikjunior.kache.store.room/KacheDatabase): io.github.slavikjunior.kache.store.room/RoomStorageEngine // io.github.slavikjunior.kache.store.room/RoomStorageEngineFactory.create|create(io.github.slavikjunior.kache.store.room.KacheDatabase){}[0]
+}
+
+final fun io.github.slavikjunior.kache.store.room/createFromCachesDirectory(kotlin/String = ...): io.github.slavikjunior.kache.store.room/RoomStorageEngine // io.github.slavikjunior.kache.store.room/createFromCachesDirectory|createFromCachesDirectory(kotlin.String){}[0]
