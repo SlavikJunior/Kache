@@ -7,6 +7,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 class L1MemoryCacheTest {
 
@@ -65,9 +67,9 @@ class L1MemoryCacheTest {
     @Test
     fun expiredEntryIsNotReturnedAndIsReapedOnRead() = runTest {
         val cache = L1MemoryCache<String, String>(maxSize = 4, timeSource = time)
-        cache.put("k", "v", ttlMs = 100L)
+        cache.put("k", "v", ttl = 100.milliseconds)
 
-        time.advance(101L)
+        time.advance(101.milliseconds)
 
         assertNull(cache.get("k"))
         assertEquals(0, cache.size(), "reading an expired entry must drop it")
@@ -77,15 +79,15 @@ class L1MemoryCacheTest {
     fun defaultTtlAppliesWhenPutOmitsIt() = runTest {
         val cache = L1MemoryCache<String, String>(
             maxSize = 4,
-            defaultTtlMs = 100L,
+            defaultTtl = 100.milliseconds,
             timeSource = time,
         )
         cache.put("k", "v")
 
-        time.advance(99L)
+        time.advance(99.milliseconds)
         assertNotNull(cache.get("k"), "still inside the default TTL")
 
-        time.advance(2L)
+        time.advance(2.milliseconds)
         assertNull(cache.get("k"), "past the default TTL")
     }
 
@@ -93,12 +95,12 @@ class L1MemoryCacheTest {
     fun explicitTtlOverridesTheDefault() = runTest {
         val cache = L1MemoryCache<String, String>(
             maxSize = 4,
-            defaultTtlMs = 100L,
+            defaultTtl = 100.milliseconds,
             timeSource = time,
         )
-        cache.put("k", "v", ttlMs = 10_000L)
+        cache.put("k", "v", ttl = 10.seconds)
 
-        time.advance(500L)
+        time.advance(500.milliseconds)
 
         assertNotNull(cache.get("k"))
     }
@@ -106,9 +108,9 @@ class L1MemoryCacheTest {
     @Test
     fun entryWithoutTtlSurvivesTimeTravel() = runTest {
         val cache = L1MemoryCache<String, String>(maxSize = 4, timeSource = time)
-        cache.put("k", "v", ttlMs = null)
+        cache.put("k", "v", ttl = null)
 
-        time.advance(1_000_000L)
+        time.advance(1_000.seconds)
 
         assertNotNull(cache.get("k"))
     }
@@ -116,9 +118,9 @@ class L1MemoryCacheTest {
     @Test
     fun getStaleReturnsAnExpiredValueWithoutEvictingIt() = runTest {
         val cache = L1MemoryCache<String, String>(maxSize = 4, timeSource = time)
-        cache.put("k", "v", ttlMs = 100L)
+        cache.put("k", "v", ttl = 100.milliseconds)
 
-        time.advance(500L)
+        time.advance(500.milliseconds)
 
         // This is what StaleWhileRevalidate needs: a usable value during a refresh.
         val stale = cache.getStale("k")
@@ -138,11 +140,11 @@ class L1MemoryCacheTest {
     @Test
     fun removeExpiredDropsOnlyExpiredEntries() = runTest {
         val cache = L1MemoryCache<String, String>(maxSize = 8, timeSource = time)
-        cache.put("fresh", "1", ttlMs = 10_000L)
-        cache.put("stale", "2", ttlMs = 100L)
-        cache.put("forever", "3", ttlMs = null)
+        cache.put("fresh", "1", ttl = 10.seconds)
+        cache.put("stale", "2", ttl = 100.milliseconds)
+        cache.put("forever", "3", ttl = null)
 
-        time.advance(500L)
+        time.advance(500.milliseconds)
 
         assertEquals(1, cache.removeExpired())
         assertNull(cache.get("stale"))
@@ -153,9 +155,9 @@ class L1MemoryCacheTest {
     @Test
     fun sizeIncludesExpiredEntriesUntilTheyAreReaped() = runTest {
         val cache = L1MemoryCache<String, String>(maxSize = 8, timeSource = time)
-        cache.put("k", "v", ttlMs = 100L)
+        cache.put("k", "v", ttl = 100.milliseconds)
 
-        time.advance(500L)
+        time.advance(500.milliseconds)
 
         assertEquals(1, cache.size(), "size counts records, it does not filter by TTL")
     }

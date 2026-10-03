@@ -1,6 +1,7 @@
 package io.github.slavikjunior.kache.core
 
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,14 +14,14 @@ class StorageRecordTest {
 
     @Test
     fun expiresAtIsCreatedAtPlusTtl() {
-        val record = StorageRecord.create("v", serializer, createdAt = 1_000L, ttlMillis = 500L)
+        val record = StorageRecord.create("v", serializer, createdAt = 1_000L, ttl = 500.milliseconds)
 
         assertEquals(1_500L, record.expiresAt())
     }
 
     @Test
     fun recordWithoutTtlNeverExpires() {
-        val record = StorageRecord.create("v", serializer, createdAt = 1_000L, ttlMillis = null)
+        val record = StorageRecord.create("v", serializer, createdAt = 1_000L, ttl = null)
 
         assertNull(record.expiresAt())
         assertFalse(record.isExpired(currentTimeMillis = Long.MAX_VALUE))
@@ -28,7 +29,7 @@ class StorageRecordTest {
 
     @Test
     fun expiryIsStrictlyGreaterThanExpiryTimestamp() {
-        val record = StorageRecord.create("v", serializer, createdAt = 1_000L, ttlMillis = 500L)
+        val record = StorageRecord.create("v", serializer, createdAt = 1_000L, ttl = 500.milliseconds)
 
         // Exactly at the deadline the value is still usable; one millisecond later it is not.
         assertFalse(record.isExpired(currentTimeMillis = 1_500L))
@@ -46,12 +47,12 @@ class StorageRecordTest {
     @Test
     fun fromDataKeepsTheDecodedValueAndRawPayload() {
         val payload = "raw".encodeToByteArray()
-        val record = StorageRecord.fromData("decoded", payload, createdAt = 42L, ttlMillis = 7L)
+        val record = StorageRecord.fromData("decoded", payload, createdAt = 42L, ttl = 7.milliseconds)
 
         assertEquals("decoded", record.value)
         assertContentEquals(payload, record.data)
         assertEquals(42L, record.createdAt)
-        assertEquals(7L, record.ttlMillis)
+        assertEquals(7.milliseconds, record.ttl)
     }
 
     @Test

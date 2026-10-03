@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -97,10 +98,10 @@ class L1MemoryCacheConcurrencyTest {
 
         withContext(Dispatchers.Default) {
             val jobs = (0 until KEYS).map { key ->
-                async { cache.put(key, key, ttlMs = 10L) }
+                async { cache.put(key, key, ttl = 10.milliseconds) }
             }
             jobs.awaitAll()
-            time.advance(100L)
+            time.advance(100.milliseconds)
         }
 
         val removed = cache.removeExpired()

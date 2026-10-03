@@ -1,5 +1,7 @@
 package io.github.slavikjunior.kache.core
 
+import kotlin.time.Duration
+
 /**
  * A single persistent tier: values are serialized into a [StorageEngine] and decoded on
  * the way back out.
@@ -50,9 +52,9 @@ internal class StorageTier<K : Any, V : Any>(
         return TieredValue(value, origin)
     }
 
-    override suspend fun write(key: K, value: V, ttlMs: Long?) {
+    override suspend fun write(key: K, value: V, ttl: Duration?) {
         val createdAt = timeSource.currentTimeMillis()
-        val record = StorageRecord.create(value, serializer, createdAt, ttlMillis = ttlMs)
+        val record = StorageRecord.create(value, serializer, createdAt, ttl = ttl)
         writeRecord { storageEngine.put(keyToString(key), record) }
     }
 

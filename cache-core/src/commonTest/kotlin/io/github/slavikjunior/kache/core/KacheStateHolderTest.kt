@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -27,7 +28,7 @@ class KacheStateHolderTest {
         cache = L2KmpCache(
             storageEngine = engine,
             valueSerializer = serializer,
-            defaultTtlMs = TTL,
+            defaultTtl = TTL,
             timeSource = time,
         ),
     )
@@ -192,6 +193,6 @@ class KacheStateHolderTest {
     }
 
     private companion object {
-        const val TTL = 1_000L
+        val TTL = 1.seconds
     }
 }

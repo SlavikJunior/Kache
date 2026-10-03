@@ -2,6 +2,8 @@ package io.github.slavikjunior.kache.core
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Thread-safe in-memory cache with LRU eviction and optional TTL.
@@ -12,8 +14,8 @@ import kotlinx.coroutines.sync.withLock
  * @param K Key type.
  * @param V Value type.
  * @param maxSize Maximum number of entries before eviction triggers. Must be positive.
- * @param defaultTtlMs Default TTL in milliseconds applied by [put] when no TTL is given.
- *   Null means entries do not expire.
+ * @param defaultTtl How long entries stay fresh when [put] is called without a TTL of its
+ *   own. Null means entries do not expire.
  * @param timeSource Clock used for TTL decisions. Inject [MutableTimeSource] in tests,
  *   or pass a source shared with the cache pipeline to keep both tiers on one clock.
  *
@@ -21,7 +23,7 @@ import kotlinx.coroutines.sync.withLock
  */
 public class L1MemoryCache<K, V>(
     private val maxSize: Int,
-    private val defaultTtlMs: Long? = null,
+    private val defaultTtl: Duration? = null,
     internal val timeSource: TimeSource = SystemTimeSource,
 ) {
     init {
@@ -108,11 +110,13 @@ public class L1MemoryCache<K, V>(
      *
      * @param key The key to write.
      * @param value The value to store.
-     * @param ttlMs TTL in milliseconds, or null to use [defaultTtlMs].
+     * @param ttl How long the entry stays fresh, or null to use [defaultTtl].
      */
-    public suspend fun put(key: K, value: V, ttlMs: Long? = defaultTtlMs): Unit = mutex.withLock {
+    public suspend fun put(key: K, value: V, ttl: Duration? = defaultTtl): Unit = mutex.withLock {
         val now = timeSource.currentTimeMillis()
-        val expiresAt = ttlMs?.let { now + it }
+        // Kept as epoch millis internally: every comparison here is between timestamps,
+        // so converting once on the way in is cheaper than converting on each check.
+        val expiresAt = ttl?.let { now + it.inWholeMilliseconds }
 
         val isUpdate = entries.containsKey(key)
         entries[key] = Entry(value = value, createdAt = now, expiresAt = expiresAt)
@@ -196,7 +200,7 @@ public class L1MemoryCache<K, V>(
         fun toRecord(): StorageRecord<V> = StorageRecord(
             value = value,
             createdAt = createdAt,
-            ttlMillis = expiresAt?.let { it - createdAt },
+            ttl = expiresAt?.let { (it - createdAt).milliseconds },
         )
     }
 

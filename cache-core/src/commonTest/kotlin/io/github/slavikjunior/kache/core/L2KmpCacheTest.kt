@@ -3,6 +3,8 @@ package io.github.slavikjunior.kache.core
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -21,7 +23,7 @@ class L2KmpCacheTest {
         L2KmpCache(
             storageEngine = engine,
             valueSerializer = serializer,
-            defaultTtlMs = TTL,
+            defaultTtl = TTL,
             timeSource = time,
             retryPolicy = retryPolicy,
         )
@@ -55,7 +57,7 @@ class L2KmpCacheTest {
     fun cacheFirstTreatsAnExpiredRecordAsAMiss() = runTest {
         val cache = cache()
         cache.put("k", "cached")
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
 
         val result = cache.get("k", CacheStrategy.CacheFirst) { "fresh" }.toList().last()
 
@@ -188,7 +190,7 @@ class L2KmpCacheTest {
     fun staleWhileRevalidateServesAnExpiredValueWithAStaleOrigin() = runTest {
         val cache = cache()
         cache.put("k", "cached")
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
 
         val results = cache.get("k", CacheStrategy.StaleWhileRevalidate) { "fresh" }.toList()
 
@@ -205,7 +207,7 @@ class L2KmpCacheTest {
     fun staleWhileRevalidateLeavesTheStaleRecordWhenTheRefreshFails() = runTest {
         val cache = cache()
         cache.put("k", "cached")
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
 
         val results = cache.get("k", CacheStrategy.StaleWhileRevalidate) {
             throw TestNetworkException("offline")
@@ -233,13 +235,13 @@ class L2KmpCacheTest {
         val cache = cache()
         cache.put("default", "v")
 
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
         assertIs<CacheResult.Error<String>>(
             cache.get("default", CacheStrategy.CacheFirst, fetcher = null).toList().last(),
         )
 
-        cache.put("explicit", "v", ttlMs = TTL * 10)
-        time.advance(TTL + 1L)
+        cache.put("explicit", "v", ttl = 10.seconds)
+        time.advance(TTL + 1.milliseconds)
         assertIs<CacheResult.Success<String>>(
             cache.get("explicit", CacheStrategy.CacheFirst, fetcher = null).toList().last(),
         )
@@ -317,7 +319,7 @@ class L2KmpCacheTest {
     fun removedExpiredEntriesAreReported() = runTest {
         val cache = cache()
         cache.put("k", "v")
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
 
         // removeExpired lives on StorageEngine, not on the cache contract.
         val removed = engine.removeExpired(time.currentTimeMillis())
@@ -344,6 +346,6 @@ class L2KmpCacheTest {
     }
 
     private companion object {
-        const val TTL = 1_000L
+        val TTL = 1.seconds
     }
 }

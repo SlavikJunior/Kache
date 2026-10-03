@@ -3,6 +3,9 @@ package io.github.slavikjunior.kache.core
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
@@ -18,11 +21,11 @@ class ChainKmpCacheTest {
     private val engine = InMemoryStorageEngine(serializer)
     private val l1 = L1MemoryCache<String, String>(maxSize = 4, timeSource = time)
 
-    private fun chain(defaultTtlMs: Long? = TTL): ChainKmpCache<String, String> = ChainKmpCache(
+    private fun chain(defaultTtl: Duration? = TTL): ChainKmpCache<String, String> = ChainKmpCache(
         l1Cache = l1,
         l2Storage = engine,
         serializer = serializer,
-        defaultTtlMs = defaultTtlMs,
+        defaultTtl = defaultTtl,
     )
 
     @Test
@@ -44,7 +47,7 @@ class ChainKmpCacheTest {
             l1Cache = smallL1,
             l2Storage = engine,
             serializer = serializer,
-            defaultTtlMs = TTL,
+            defaultTtl = TTL,
         )
         cache.put("a", "1")
         cache.put("b", "2") // evicts "a" from L1, but "a" is still in L2
@@ -60,7 +63,7 @@ class ChainKmpCacheTest {
         // Write straight to L2 so the first read has to come from storage.
         engine.seed(
             "k",
-            StorageRecord.create("from-disk", serializer, createdAt = 0L, ttlMillis = TTL),
+            StorageRecord.create("from-disk", serializer, createdAt = 0L, ttl = TTL),
         )
 
         cache.get("k", CacheStrategy.CacheFirst, fetcher = null).toList()
@@ -73,7 +76,7 @@ class ChainKmpCacheTest {
     fun bothTiersShareOneClockSoTheyCannotDisagreeOnExpiry() = runTest {
         val cache = chain()
         cache.put("k", "v")
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
 
         // L1 must not serve a value L2 considers expired, or a stale value would be
         // reported as fresh depending on which tier answered.
@@ -86,7 +89,7 @@ class ChainKmpCacheTest {
     fun staleWhileRevalidateReportsMemoryStaleAfterExpiry() = runTest {
         val cache = chain()
         cache.put("k", "v")
-        time.advance(TTL + 1L)
+        time.advance(TTL + 1.milliseconds)
 
         val results = cache.get("k", CacheStrategy.StaleWhileRevalidate) { "fresh" }.toList()
 
@@ -149,6 +152,6 @@ class ChainKmpCacheTest {
     }
 
     private companion object {
-        const val TTL = 1_000L
+        val TTL = 1.seconds
     }
 }

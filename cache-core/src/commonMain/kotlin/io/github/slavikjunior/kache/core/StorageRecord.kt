@@ -1,5 +1,7 @@
 package io.github.slavikjunior.kache.core
 
+import kotlin.time.Duration
+
 /**
  * A single cache record.
  *
@@ -13,13 +15,15 @@ package io.github.slavikjunior.kache.core
  * @param value The live value. L1 reads this directly.
  * @param data The serialized payload. L2 persists this. Empty for pure L1 entries.
  * @param createdAt Timestamp in milliseconds since epoch when the record was written.
- * @param ttlMillis Optional time-to-live in milliseconds. Null means the record never expires.
+ * @param ttl How long the record stays fresh. Null means it never expires. Durations that
+ *   are zero or negative make the record expire immediately, which is almost never what
+ *   the caller meant; the tier implementations are where that is normalised.
  */
 public data class StorageRecord<out V>(
     public val value: V,
     public val data: ByteArray = byteArrayOf(),
     public val createdAt: Long,
-    public val ttlMillis: Long? = null,
+    public val ttl: Duration? = null,
 ) {
     /**
      * Checks whether this record has expired.
@@ -30,15 +34,17 @@ public data class StorageRecord<out V>(
      * @param currentTimeMillis The current time in milliseconds since epoch.
      * @return true if the record is expired, false otherwise.
      */
-    public fun isExpired(currentTimeMillis: Long): Boolean =
-        ttlMillis?.let { (currentTimeMillis - createdAt) > it } ?: false
+    public fun isExpired(currentTimeMillis: Long): Boolean {
+        val lifetime = ttl ?: return false
+        return currentTimeMillis - createdAt > lifetime.inWholeMilliseconds
+    }
 
     /**
      * Timestamp at which this record expires, or null if it never expires.
      *
      * @return Absolute expiration timestamp in milliseconds since epoch, or null.
      */
-    public fun expiresAt(): Long? = ttlMillis?.let { createdAt + it }
+    public fun expiresAt(): Long? = ttl?.let { createdAt + it.inWholeMilliseconds }
 
     public companion object {
         /**
@@ -47,19 +53,19 @@ public data class StorageRecord<out V>(
          * @param value The value to store.
          * @param serializer Serializer used to produce the persisted [StorageRecord.data].
          * @param createdAt Timestamp in milliseconds since epoch when the record was written.
-         * @param ttlMillis Optional time-to-live in milliseconds.
+         * @param ttl Optional time-to-live.
          * @throws KacheException.SerializationException if serialization fails.
          */
         public fun <T> create(
             value: T,
             serializer: KacheSerializer<T>,
             createdAt: Long,
-            ttlMillis: Long? = null,
+            ttl: Duration? = null,
         ): StorageRecord<T> = StorageRecord(
             value = value,
             data = serializer.serialize(value),
             createdAt = createdAt,
-            ttlMillis = ttlMillis,
+            ttl = ttl,
         )
 
         /**
@@ -68,18 +74,18 @@ public data class StorageRecord<out V>(
          * @param value The value decoded from [data].
          * @param data The serialized payload as read from L2.
          * @param createdAt Timestamp in milliseconds since epoch when the record was written.
-         * @param ttlMillis Optional time-to-live in milliseconds.
+         * @param ttl Optional time-to-live.
          */
         public fun <T> fromData(
             value: T,
             data: ByteArray,
             createdAt: Long,
-            ttlMillis: Long? = null,
+            ttl: Duration? = null,
         ): StorageRecord<T> = StorageRecord(
             value = value,
             data = data,
             createdAt = createdAt,
-            ttlMillis = ttlMillis,
+            ttl = ttl,
         )
     }
 }

@@ -1,5 +1,7 @@
 package io.github.slavikjunior.kache.core
 
+import kotlin.time.Duration
+
 import kotlin.concurrent.Volatile
 import kotlin.time.Clock
 
@@ -40,13 +42,13 @@ public class MutableTimeSource(initialTimeMillis: Long = 0L) : TimeSource {
     /**
      * Moves the clock forward.
      *
-     * @param amountMillis Milliseconds to add. Must not be negative, since the source
-     *   cannot travel backwards.
-     * @throws IllegalArgumentException if [amountMillis] is negative.
+     * @param amount How far to move the clock forward. Must not be negative, since the
+     *   source cannot travel backwards.
+     * @throws IllegalArgumentException if [amount] is negative.
      */
-    public fun advance(amountMillis: Long) {
-        require(amountMillis >= 0) { "amountMillis must be >= 0, but was $amountMillis" }
-        currentTimeMillis += amountMillis
+    public fun advance(amount: Duration) {
+        require(amount >= Duration.ZERO) { "amount must be >= 0, but was $amount" }
+        currentTimeMillis += amount.inWholeMilliseconds
     }
 
     /**
