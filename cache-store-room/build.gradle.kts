@@ -1,3 +1,4 @@
+import org.gradle.api.tasks.testing.Test
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kotlin.multiplatform.library)
@@ -66,6 +67,26 @@ kotlin {
             }
         }
     }
+}
+
+// Robolectric allocates shared memory through `java.io.FileDescriptor` internals that it
+// reaches by reflection, and that stops working on JDK 21 and newer. The launcher is
+// pinned to 17 so the test process runs somewhere Robolectric can instrument, while the
+// daemon stays free to use a modern JDK for compilation.
+//
+// The SDK has to move with it: src/androidHostTest/resources/robolectric.properties pins
+// SDK 34, because SDK 36 refuses to run on anything older than Java 21. The two settings
+// are only valid together.
+//
+// This matters on CI too: setup-java provides 17 there while
+// gradle/gradle-daemon-jvm.properties pins the daemon to a recent JDK, so the launcher has
+// to be set explicitly rather than inherited.
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(
+        javaToolchains.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(17))
+        }
+    )
 }
 
 // Room code generation is configured per target rather than through the catch-all
