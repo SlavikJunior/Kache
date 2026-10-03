@@ -276,7 +276,7 @@ class L2KmpCacheTest {
     @Test
     fun retryPolicyDecidesWhetherTheFetcherRunsAgain() = runTest {
         var attempts = 0
-        val cache = cache(RetryPolicy.fixed(attempts = 2, delayMs = 1L))
+        val cache = cache(RetryPolicy.fixed(attempts = 2, delay = 1.milliseconds))
 
         val result = cache.get("k", CacheStrategy.CacheFirst) {
             attempts++
@@ -291,7 +291,7 @@ class L2KmpCacheTest {
     @Test
     fun retriesStopAtTheFirstSuccess() = runTest {
         var attempts = 0
-        val cache = cache(RetryPolicy.fixed(attempts = 5, delayMs = 1L))
+        val cache = cache(RetryPolicy.fixed(attempts = 5, delay = 1.milliseconds))
 
         val result = cache.get("k", CacheStrategy.CacheFirst) {
             attempts++

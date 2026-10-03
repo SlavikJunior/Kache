@@ -56,15 +56,15 @@ class ReadmeSnippetCheck {
 
     private fun recipe9(): Any = RetryPolicy.Exponential(
         maxAttempts = 3,
-        initialDelayMs = 200L,
-        maxDelayMs = 2_000L,
+        initialDelay = 200.milliseconds,
+        maxDelay = 2.seconds,
         multiplier = 2.0,
         jitterRatio = 0.2,
     )
 
     private fun recipe9Shortcuts(): Any = listOf(
         RetryPolicy.aggressive(),
-        RetryPolicy.fixed(3, 200L),
+        RetryPolicy.fixed(3, 200.milliseconds),
         RetryPolicy.exponential(),
         RetryPolicy.None,
     )

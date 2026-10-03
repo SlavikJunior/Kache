@@ -106,37 +106,37 @@ sealed interface <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/CacheRe
 }
 
 sealed interface io.github.slavikjunior.kache.core/RetryPolicy { // io.github.slavikjunior.kache.core/RetryPolicy|null[0]
-    abstract fun delayAfter(kotlin/Int): kotlin/Long // io.github.slavikjunior.kache.core/RetryPolicy.delayAfter|delayAfter(kotlin.Int){}[0]
+    abstract fun delayAfter(kotlin/Int): kotlin.time/Duration // io.github.slavikjunior.kache.core/RetryPolicy.delayAfter|delayAfter(kotlin.Int){}[0]
     abstract fun shouldRetry(kotlin/Int): kotlin/Boolean // io.github.slavikjunior.kache.core/RetryPolicy.shouldRetry|shouldRetry(kotlin.Int){}[0]
 
     final class Exponential : io.github.slavikjunior.kache.core/RetryPolicy { // io.github.slavikjunior.kache.core/RetryPolicy.Exponential|null[0]
-        constructor <init>(kotlin/Int = ..., kotlin/Long = ..., kotlin/Long = ..., kotlin/Double = ..., kotlin/Double = ..., kotlin/Function0<kotlin/Double> = ...) // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.<init>|<init>(kotlin.Int;kotlin.Long;kotlin.Long;kotlin.Double;kotlin.Double;kotlin.Function0<kotlin.Double>){}[0]
+        constructor <init>(kotlin/Int = ..., kotlin.time/Duration = ..., kotlin.time/Duration = ..., kotlin/Double = ..., kotlin/Double = ..., kotlin/Function0<kotlin/Double> = ...) // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.<init>|<init>(kotlin.Int;kotlin.time.Duration;kotlin.time.Duration;kotlin.Double;kotlin.Double;kotlin.Function0<kotlin.Double>){}[0]
 
-        final val initialDelayMs // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.initialDelayMs|{}initialDelayMs[0]
-            final fun <get-initialDelayMs>(): kotlin/Long // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.initialDelayMs.<get-initialDelayMs>|<get-initialDelayMs>(){}[0]
+        final val initialDelay // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.initialDelay|{}initialDelay[0]
+            final fun <get-initialDelay>(): kotlin.time/Duration // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.initialDelay.<get-initialDelay>|<get-initialDelay>(){}[0]
         final val jitterRatio // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.jitterRatio|{}jitterRatio[0]
             final fun <get-jitterRatio>(): kotlin/Double // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.jitterRatio.<get-jitterRatio>|<get-jitterRatio>(){}[0]
         final val maxAttempts // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.maxAttempts|{}maxAttempts[0]
             final fun <get-maxAttempts>(): kotlin/Int // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.maxAttempts.<get-maxAttempts>|<get-maxAttempts>(){}[0]
-        final val maxDelayMs // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.maxDelayMs|{}maxDelayMs[0]
-            final fun <get-maxDelayMs>(): kotlin/Long // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.maxDelayMs.<get-maxDelayMs>|<get-maxDelayMs>(){}[0]
+        final val maxDelay // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.maxDelay|{}maxDelay[0]
+            final fun <get-maxDelay>(): kotlin.time/Duration // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.maxDelay.<get-maxDelay>|<get-maxDelay>(){}[0]
         final val multiplier // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.multiplier|{}multiplier[0]
             final fun <get-multiplier>(): kotlin/Double // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.multiplier.<get-multiplier>|<get-multiplier>(){}[0]
         final val totalAttempts // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.totalAttempts|{}totalAttempts[0]
             final fun <get-totalAttempts>(): kotlin/Int // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.totalAttempts.<get-totalAttempts>|<get-totalAttempts>(){}[0]
 
-        final fun delayAfter(kotlin/Int): kotlin/Long // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.delayAfter|delayAfter(kotlin.Int){}[0]
+        final fun delayAfter(kotlin/Int): kotlin.time/Duration // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.delayAfter|delayAfter(kotlin.Int){}[0]
         final fun shouldRetry(kotlin/Int): kotlin/Boolean // io.github.slavikjunior.kache.core/RetryPolicy.Exponential.shouldRetry|shouldRetry(kotlin.Int){}[0]
     }
 
     final object Companion { // io.github.slavikjunior.kache.core/RetryPolicy.Companion|null[0]
         final fun aggressive(): io.github.slavikjunior.kache.core/RetryPolicy.Exponential // io.github.slavikjunior.kache.core/RetryPolicy.Companion.aggressive|aggressive(){}[0]
         final fun exponential(): io.github.slavikjunior.kache.core/RetryPolicy.Exponential // io.github.slavikjunior.kache.core/RetryPolicy.Companion.exponential|exponential(){}[0]
-        final fun fixed(kotlin/Int = ..., kotlin/Long = ...): io.github.slavikjunior.kache.core/RetryPolicy.Exponential // io.github.slavikjunior.kache.core/RetryPolicy.Companion.fixed|fixed(kotlin.Int;kotlin.Long){}[0]
+        final fun fixed(kotlin/Int = ..., kotlin.time/Duration = ...): io.github.slavikjunior.kache.core/RetryPolicy.Exponential // io.github.slavikjunior.kache.core/RetryPolicy.Companion.fixed|fixed(kotlin.Int;kotlin.time.Duration){}[0]
     }
 
     final object None : io.github.slavikjunior.kache.core/RetryPolicy { // io.github.slavikjunior.kache.core/RetryPolicy.None|null[0]
-        final fun delayAfter(kotlin/Int): kotlin/Long // io.github.slavikjunior.kache.core/RetryPolicy.None.delayAfter|delayAfter(kotlin.Int){}[0]
+        final fun delayAfter(kotlin/Int): kotlin.time/Duration // io.github.slavikjunior.kache.core/RetryPolicy.None.delayAfter|delayAfter(kotlin.Int){}[0]
         final fun equals(kotlin/Any?): kotlin/Boolean // io.github.slavikjunior.kache.core/RetryPolicy.None.equals|equals(kotlin.Any?){}[0]
         final fun hashCode(): kotlin/Int // io.github.slavikjunior.kache.core/RetryPolicy.None.hashCode|hashCode(){}[0]
         final fun shouldRetry(kotlin/Int): kotlin/Boolean // io.github.slavikjunior.kache.core/RetryPolicy.None.shouldRetry|shouldRetry(kotlin.Int){}[0]

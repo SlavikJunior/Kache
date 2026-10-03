@@ -193,26 +193,26 @@ public final class io/github/slavikjunior/kache/core/MutableTimeSource : io/gith
 
 public abstract interface class io/github/slavikjunior/kache/core/RetryPolicy {
 	public static final field Companion Lio/github/slavikjunior/kache/core/RetryPolicy$Companion;
-	public abstract fun delayAfter (I)J
+	public abstract fun delayAfter-5sfh64U (I)J
 	public abstract fun shouldRetry (I)Z
 }
 
 public final class io/github/slavikjunior/kache/core/RetryPolicy$Companion {
 	public final fun aggressive ()Lio/github/slavikjunior/kache/core/RetryPolicy$Exponential;
 	public final fun exponential ()Lio/github/slavikjunior/kache/core/RetryPolicy$Exponential;
-	public final fun fixed (IJ)Lio/github/slavikjunior/kache/core/RetryPolicy$Exponential;
-	public static synthetic fun fixed$default (Lio/github/slavikjunior/kache/core/RetryPolicy$Companion;IJILjava/lang/Object;)Lio/github/slavikjunior/kache/core/RetryPolicy$Exponential;
+	public final fun fixed-HG0u8IE (IJ)Lio/github/slavikjunior/kache/core/RetryPolicy$Exponential;
+	public static synthetic fun fixed-HG0u8IE$default (Lio/github/slavikjunior/kache/core/RetryPolicy$Companion;IJILjava/lang/Object;)Lio/github/slavikjunior/kache/core/RetryPolicy$Exponential;
 }
 
 public final class io/github/slavikjunior/kache/core/RetryPolicy$Exponential : io/github/slavikjunior/kache/core/RetryPolicy {
 	public fun <init> ()V
-	public fun <init> (IJJDDLkotlin/jvm/functions/Function0;)V
 	public synthetic fun <init> (IJJDDLkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public fun delayAfter (I)J
-	public final fun getInitialDelayMs ()J
+	public synthetic fun <init> (IJJDDLkotlin/jvm/functions/Function0;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun delayAfter-5sfh64U (I)J
+	public final fun getInitialDelay-UwyO8pc ()J
 	public final fun getJitterRatio ()D
 	public final fun getMaxAttempts ()I
-	public final fun getMaxDelayMs ()J
+	public final fun getMaxDelay-UwyO8pc ()J
 	public final fun getMultiplier ()D
 	public final fun getTotalAttempts ()I
 	public fun shouldRetry (I)Z
@@ -220,7 +220,7 @@ public final class io/github/slavikjunior/kache/core/RetryPolicy$Exponential : i
 
 public final class io/github/slavikjunior/kache/core/RetryPolicy$None : io/github/slavikjunior/kache/core/RetryPolicy {
 	public static final field INSTANCE Lio/github/slavikjunior/kache/core/RetryPolicy$None;
-	public fun delayAfter (I)J
+	public fun delayAfter-5sfh64U (I)J
 	public fun equals (Ljava/lang/Object;)Z
 	public fun hashCode ()I
 	public fun shouldRetry (I)Z
