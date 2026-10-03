@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
  * @property data Serialized byte array of the cached value.
  * @property createdAt Epoch milliseconds when the entry was stored.
  * @property ttlMillis Time-to-live in milliseconds, or null if the entry never expires.
+ *   Kept as a number rather than a [kotlin.time.Duration] because this is the database
+ *   schema; [RoomStorageEngine] converts at the boundary.
  */
 @Entity(tableName = "cache_entries")
 public data class CacheEntryEntity(

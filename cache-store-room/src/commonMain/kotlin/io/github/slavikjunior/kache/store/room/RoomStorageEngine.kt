@@ -1,5 +1,7 @@
 package io.github.slavikjunior.kache.store.room
 
+import kotlin.time.Duration.Companion.milliseconds
+
 import io.github.slavikjunior.kache.core.KacheException
 import io.github.slavikjunior.kache.core.StorageEngine
 import io.github.slavikjunior.kache.core.StorageRecord
@@ -25,7 +27,7 @@ public class RoomStorageEngine internal constructor(
                 value = entity.data,
                 data = entity.data,
                 createdAt = entity.createdAt,
-                ttlMillis = entity.ttlMillis
+                ttl = entity.ttlMillis?.milliseconds,
             )
         } catch (e: Exception) {
             throw KacheException.DiskReadException(cause = e)
@@ -38,7 +40,9 @@ public class RoomStorageEngine internal constructor(
                 cacheKey = key,
                 data = record.data,
                 createdAt = record.createdAt,
-                ttlMillis = record.ttlMillis
+                // The column stays in milliseconds on purpose: it is part of the database
+                // schema, and changing it would force a migration on every consumer.
+                ttlMillis = record.ttl?.inWholeMilliseconds,
             )
             dao.put(entity)
         } catch (e: Exception) {

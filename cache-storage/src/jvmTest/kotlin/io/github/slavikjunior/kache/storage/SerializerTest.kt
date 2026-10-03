@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.serializer
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -104,7 +105,7 @@ class SerializerTest {
     fun serializerWorksThroughStorageRecord() {
         val original = Account("u-7", Address("Moscow", "101000"), listOf("vip"))
 
-        val record = StorageRecord.create(original, account, createdAt = 42L, ttlMillis = 10L)
+        val record = StorageRecord.create(original, account, createdAt = 42L, ttl = 10.milliseconds)
         val restored = account.deserialize(record.data)
 
         assertEquals(original, restored)

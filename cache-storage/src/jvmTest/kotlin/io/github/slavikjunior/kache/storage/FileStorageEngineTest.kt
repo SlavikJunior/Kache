@@ -11,6 +11,8 @@ import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -44,14 +46,14 @@ class FileStorageEngineTest {
 
     @Test
     fun roundTripKeepsValueAndTtl() = runTest {
-        val record = StorageRecord.create("payload", StringSerializer(), createdAt = 123L, ttlMillis = 456L)
+        val record = StorageRecord.create("payload", StringSerializer(), createdAt = 123L, ttl = 456.milliseconds)
 
         engine.put("key", record)
         val read = engine.get("key")
 
         assertNotNull(read)
         assertEquals(123L, read.createdAt)
-        assertEquals(456L, read.ttlMillis)
+        assertEquals(456.milliseconds, read.ttl)
         assertEquals("payload", StringSerializer().deserialize(read.data))
     }
 
@@ -119,16 +121,16 @@ class FileStorageEngineTest {
 
     @Test
     fun removeExpiredLeavesAnUnreadableRecordCountedOnlyOnce() = runTest {
-        engine.put("a", StorageRecord.create("1", StringSerializer(), createdAt = 0L, ttlMillis = 10L))
-        engine.put("b", StorageRecord.create("2", StringSerializer(), createdAt = 0L, ttlMillis = 10L))
+        engine.put("a", StorageRecord.create("1", StringSerializer(), createdAt = 0L, ttl = 10.milliseconds))
+        engine.put("b", StorageRecord.create("2", StringSerializer(), createdAt = 0L, ttl = 10.milliseconds))
 
-        assertEquals(2L, engine.removeExpired(now = 1_000L))
-        assertEquals(0L, engine.removeExpired(now = 1_000L), "a second pass finds nothing")
+        assertEquals(2L, engine.removeExpired(now = 1_000))
+        assertEquals(0L, engine.removeExpired(now = 1_000), "a second pass finds nothing")
     }
 
     @Test
     fun removeExpiredKeepsRecordsWithoutTtl() = runTest {
-        engine.put("forever", StorageRecord.create("v", StringSerializer(), createdAt = 0L, ttlMillis = null))
+        engine.put("forever", StorageRecord.create("v", StringSerializer(), createdAt = 0L, ttl = null))
 
         assertEquals(0L, engine.removeExpired(now = Long.MAX_VALUE))
         assertEquals(1L, engine.size())
@@ -136,10 +138,10 @@ class FileStorageEngineTest {
 
     @Test
     fun removeExpiredSkipsLeftoverTempFiles() = runTest {
-        engine.put("k", StorageRecord.create("v", StringSerializer(), createdAt = 0L, ttlMillis = 10L))
+        engine.put("k", StorageRecord.create("v", StringSerializer(), createdAt = 0L, ttl = 10.milliseconds))
         directory.resolve("interrupted.tmp").writeText("partial")
 
-        assertEquals(1L, engine.removeExpired(now = 1_000L))
+        assertEquals(1L, engine.removeExpired(now = 1_000))
         assertTrue(
             directory.resolve("interrupted.tmp").exists(),
             "an interrupted write is not a record and must be left alone",
@@ -174,10 +176,10 @@ class FileStorageEngineTest {
 
     @Test
     fun removeExpiredDropsOnlyExpiredRecords() = runTest {
-        engine.put("fresh", StorageRecord.create("1", StringSerializer(), createdAt = 0L, ttlMillis = 10_000L))
-        engine.put("stale", StorageRecord.create("2", StringSerializer(), createdAt = 0L, ttlMillis = 10L))
+        engine.put("fresh", StorageRecord.create("1", StringSerializer(), createdAt = 0L, ttl = 10.seconds))
+        engine.put("stale", StorageRecord.create("2", StringSerializer(), createdAt = 0L, ttl = 10.milliseconds))
 
-        val removed = engine.removeExpired(now = 1_000L)
+        val removed = engine.removeExpired(now = 1_000)
 
         assertEquals(1L, removed)
         assertNotNull(engine.get("fresh"))
@@ -188,12 +190,12 @@ class FileStorageEngineTest {
     fun expiredRecordsAreStillReadableByDesign() = runTest {
         // StaleWhileRevalidate needs the value, so the engine returns it and leaves the
         // decision to expire to the strategy above.
-        engine.put("k", StorageRecord.create("v", StringSerializer(), createdAt = 0L, ttlMillis = 10L))
+        engine.put("k", StorageRecord.create("v", StringSerializer(), createdAt = 0L, ttl = 10.milliseconds))
 
         val read = engine.get("k")
 
         assertNotNull(read)
-        assertTrue(read.isExpired(currentTimeMillis = 5_000L))
+        assertTrue(read.isExpired(currentTimeMillis = 5_000))
     }
 
     @Test
@@ -209,7 +211,7 @@ class FileStorageEngineTest {
         val cache = L2KmpCache<String, Profile>(
             storageEngine = FileStorageEngine(directory.absolutePath),
             valueSerializer = KotlinxJsonSerializer(Profile.serializer()),
-            defaultTtlMs = 10_000L,
+            defaultTtl = 10.seconds,
         )
         val profile = Profile(id = "u-1", name = "Ada")
 

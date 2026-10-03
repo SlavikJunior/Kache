@@ -4,6 +4,8 @@ import io.github.slavikjunior.kache.core.KacheSerializer
 import io.github.slavikjunior.kache.core.StorageRecord
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -34,14 +36,14 @@ abstract class RoomStorageEngineTestBase {
     @Test
     fun roundTripKeepsPayloadAndTtl() = runTest {
         val engine = createEngine()
-        val record = StorageRecord.create("payload", TextSerializer, createdAt = 123L, ttlMillis = 456L)
+        val record = StorageRecord.create("payload", TextSerializer, createdAt = 123L, ttl = 456.milliseconds)
 
         engine.put("key", record)
         val read = engine.get("key")
 
         assertNotNull(read)
         assertEquals(123L, read.createdAt)
-        assertEquals(456L, read.ttlMillis)
+        assertEquals(456.milliseconds, read.ttl)
         assertEquals("payload", TextSerializer.deserialize(read.data))
     }
 
@@ -96,8 +98,8 @@ abstract class RoomStorageEngineTestBase {
     @Test
     fun removeExpiredDropsOnlyExpiredRecords() = runTest {
         val engine = createEngine()
-        engine.put("fresh", StorageRecord.create("1", TextSerializer, createdAt = 0L, ttlMillis = 10_000L))
-        engine.put("stale", StorageRecord.create("2", TextSerializer, createdAt = 0L, ttlMillis = 10L))
+        engine.put("fresh", StorageRecord.create("1", TextSerializer, createdAt = 0L, ttl = 10.seconds))
+        engine.put("stale", StorageRecord.create("2", TextSerializer, createdAt = 0L, ttl = 10.milliseconds))
 
         val removed = engine.removeExpired(now = 1_000L)
 
@@ -109,7 +111,7 @@ abstract class RoomStorageEngineTestBase {
     @Test
     fun removeExpiredKeepsRecordsWithoutTtl() = runTest {
         val engine = createEngine()
-        engine.put("forever", StorageRecord.create("v", TextSerializer, createdAt = 0L, ttlMillis = null))
+        engine.put("forever", StorageRecord.create("v", TextSerializer, createdAt = 0L, ttl = null))
 
         assertEquals(0L, engine.removeExpired(now = Long.MAX_VALUE))
         assertEquals(1L, engine.size())
@@ -125,7 +127,7 @@ abstract class RoomStorageEngineTestBase {
         // StaleWhileRevalidate depends on this: the engine must hand back the value and
         // leave the decision about staleness to the strategy above.
         val engine = createEngine()
-        engine.put("k", StorageRecord.create("v", TextSerializer, createdAt = 0L, ttlMillis = 10L))
+        engine.put("k", StorageRecord.create("v", TextSerializer, createdAt = 0L, ttl = 10.milliseconds))
 
         val read = engine.get("k")
 
