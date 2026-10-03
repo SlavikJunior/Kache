@@ -53,3 +53,14 @@ kotlin {
         }
     }
 }
+
+// The Android compilation is not covered by the `jvm { compilerOptions }` block above and
+// would otherwise target whatever JDK the Gradle daemon runs on. A Robolectric host test
+// in a dependent module runs on JDK 17 (see :cache-store-room), so the bytecode it links
+// against has to stay loadable there. Task-level configuration is used because the
+// extension-level compilerOptions does not reach the AGP KMP Android compilation.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
