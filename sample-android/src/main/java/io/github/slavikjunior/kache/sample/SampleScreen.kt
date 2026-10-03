@@ -235,9 +235,10 @@ private fun StorageCard(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
-                text = "After the run one entry is left behind. Relaunch the app and the " +
-                    "profile above must report origin=${CacheOrigin.DISK}, which is the proof " +
-                    "that the entry survived process death.",
+                text = "The profile above uses NetworkFirst, so it reports " +
+                    "origin=${CacheOrigin.NETWORK} every time by design. Persistence is proved " +
+                    "by the \"Cold read\" check below, which uses CacheFirst and must report " +
+                    "origin=${CacheOrigin.DISK} after the process is restarted.",
                 style = MaterialTheme.typography.bodySmall,
             )
 
