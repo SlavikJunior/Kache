@@ -236,8 +236,8 @@ internal class CachePipeline<K, V>(
                 completedAttempts++
                 if (!retryPolicy.shouldRetry(completedAttempts)) return FetchOutcome.Failure(e)
 
-                val delayMs = retryPolicy.delayAfter(completedAttempts)
-                if (delayMs > 0) delay(delayMs)
+                val retryDelay = retryPolicy.delayAfter(completedAttempts)
+                if (retryDelay > Duration.ZERO) delay(retryDelay)
             }
         }
     }

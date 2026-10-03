@@ -88,7 +88,7 @@ public class L1MemoryCache<K, V>(
      *
      * @param key The key to read.
      * @return The value and its remaining TTL, or null if absent or expired.
-     *   A null [L1CacheEntry.remainingTtlMs] means the entry never expires.
+     *   A null [L1CacheEntry.remainingTtl] means the entry never expires.
      */
     internal suspend fun getWithTtl(key: K): L1CacheEntry<V>? = mutex.withLock {
         val now = timeSource.currentTimeMillis()
@@ -195,7 +195,7 @@ public class L1MemoryCache<K, V>(
     ) {
         fun isExpired(now: Long): Boolean = expiresAt?.let { now > it } ?: false
 
-        fun remainingTtl(now: Long): Long? = expiresAt?.let { it - now }
+        fun remainingTtl(now: Long): Duration? = expiresAt?.let { (it - now).milliseconds }
 
         fun toRecord(): StorageRecord<V> = StorageRecord(
             value = value,
@@ -208,10 +208,10 @@ public class L1MemoryCache<K, V>(
      * A value paired with its remaining TTL.
      *
      * @param value The cached value.
-     * @param remainingTtlMs Milliseconds until expiration, or null if the entry never expires.
+     * @param remainingTtl How long until expiration, or null if the entry never expires.
      */
     internal data class L1CacheEntry<V>(
         val value: V,
-        val remainingTtlMs: Long?,
+        val remainingTtl: Duration?,
     )
 }
