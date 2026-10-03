@@ -16,10 +16,10 @@ import java.nio.file.StandardCopyOption
  * Writes are made atomic: the payload goes to a temporary file which then replaces the
  * real one, so a process death mid-write cannot leave a half-written record behind.
  *
- * Expired records are returned rather than deleted. Whether an expired value is still
- * useful is a decision for the caching strategy above, and reaping is left to
- * [clear] or an explicit [removeExpired] call, so that a strategy such as
- * `StaleWhileRevalidate` can still read a stale value.
+ * Expired records are returned rather than deleted by [get]. Whether an expired value is
+ * still useful is a decision for the caching strategy above, so that a strategy such as
+ * `StaleWhileRevalidate` can still read a stale value. Reaping is therefore explicit,
+ * through [removeExpired] or [clear].
  *
  * @param rootDirectory Directory holding the record files. Created if missing.
  */
@@ -76,6 +76,39 @@ public class FileStorageEngine(rootDirectory: String) : io.github.slavikjunior.k
 
     override suspend fun size(): Long =
         rootDir.listFiles()?.count { it.isFile && !it.name.endsWith(TEMP_SUFFIX) }?.toLong() ?: 0L
+
+    /**
+     * Deletes every expired record and reports how many went.
+     *
+     * Implemented here rather than left on the interface default, which returns 0: a
+     * backend that silently reaps nothing would grow without bound, because expired
+     * records are only otherwise removed when a key is read or overwritten.
+     *
+     * A record that cannot be decoded is counted as removed. `get` already treats it as
+     * absent and deletes it, so keeping the file would only make the size report wrong.
+     */
+    override suspend fun removeExpired(now: Long): Long {
+        val files = rootDir.listFiles() ?: return 0L
+        var removed = 0L
+
+        files.forEach { file ->
+            if (!file.isFile || file.name.endsWith(TEMP_SUFFIX)) return@forEach
+
+            val expired = try {
+                StorageRecordFileCodec.decode(Files.readAllBytes(file.toPath())).isExpired(now)
+            } catch (e: KacheException) {
+                throw e
+            } catch (e: Exception) {
+                true
+            }
+
+            if (expired && file.delete()) {
+                removed++
+            }
+        }
+
+        return removed
+    }
 
     private fun fileFor(key: String): File = File(rootDir, sanitizeKey(key))
 
