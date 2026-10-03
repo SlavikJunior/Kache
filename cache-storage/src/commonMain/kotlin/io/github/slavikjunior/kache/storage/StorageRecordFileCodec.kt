@@ -1,5 +1,7 @@
 package io.github.slavikjunior.kache.storage
 
+import kotlin.time.Duration.Companion.milliseconds
+
 import io.github.slavikjunior.kache.core.StorageRecord
 
 /**
@@ -24,11 +26,14 @@ internal object StorageRecordFileCodec {
     /**
      * Encodes [record] into its on-disk representation.
      *
-     * @param record The record to encode. Only its `data`, `createdAt` and `ttlMillis` are written.
+     * @param record The record to encode. Only its `data`, `createdAt` and `ttl` are written,
+     *   the last as whole milliseconds.
      * @return The encoded bytes.
      */
     fun encode(record: StorageRecord<*>): ByteArray {
-        val ttlPart = record.ttlMillis?.toString() ?: NO_TTL.toString()
+        // The on-disk layout stays in milliseconds: it is a wire format, and changing
+        // it would invalidate every cache written by an earlier version.
+        val ttlPart = record.ttl?.inWholeMilliseconds?.toString() ?: NO_TTL.toString()
         val header = "${record.createdAt}$SEPARATOR$ttlPart$SEPARATOR${record.data.size}$SEPARATOR"
         val headerBytes = header.encodeToByteArray()
 
@@ -54,7 +59,7 @@ internal object StorageRecordFileCodec {
 
         val secondSep = indexOfSeparator(bytes, pos)
         val ttlPart = bytes.decodeToString(pos, secondSep)
-        val ttlMillis = ttlPart.toLong().takeIf { it != NO_TTL }
+        val ttl = ttlPart.toLong().takeIf { it != NO_TTL }?.milliseconds
         pos = secondSep + 1
 
         val thirdSep = indexOfSeparator(bytes, pos)
@@ -68,7 +73,7 @@ internal object StorageRecordFileCodec {
         }
 
         val data = bytes.copyOfRange(pos, pos + dataLength)
-        return StorageRecord(value = data, data = data, createdAt = createdAt, ttlMillis = ttlMillis)
+        return StorageRecord(value = data, data = data, createdAt = createdAt, ttl = ttl)
     }
 
     private fun indexOfSeparator(bytes: ByteArray, start: Int): Int {

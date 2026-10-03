@@ -14,6 +14,8 @@ import org.robolectric.RuntimeEnvironment
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Runs the Room engine against the Android runtime under Robolectric.
@@ -47,8 +49,8 @@ class RoomStorageEngineAndroidHostTest {
 
     private fun engine(): RoomStorageEngine = RoomStorageEngineFactory.create(database)
 
-    private fun record(payload: String, ttlMs: Long? = null): StorageRecord<*> =
-        StorageRecord(value = byteArrayOf(), data = payload.encodeToByteArray(), createdAt = 0L, ttlMillis = ttlMs)
+    private fun record(payload: String, ttl: Duration? = null): StorageRecord<*> =
+        StorageRecord(value = byteArrayOf(), data = payload.encodeToByteArray(), createdAt = 0L, ttl = ttl)
 
     @Test
     fun theFactoryProducesAUsableEngine() = runBlocking {
@@ -104,7 +106,7 @@ class RoomStorageEngineAndroidHostTest {
     @Test
     fun removeExpiredIsSupportedOnAndroidToo() = runBlocking {
         val engine = engine()
-        engine.put("k", record("1", ttlMs = 10L))
+        engine.put("k", record("1", ttl = 10.milliseconds))
 
         assertEquals(1L, engine.removeExpired(now = 1_000L))
         assertNull(engine.get("k"))
