@@ -1,7 +1,21 @@
 # Kache
 
+<div align="center">
+
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-7F52FF.svg?logo=kotlin)](http://kotlinlang.org)
+[![AGP](https://img.shields.io/badge/AGP-9.4.1-3DDC84.svg?logo=androidstudio)](https://developer.android.com/studio)
+[![Coroutines](https://img.shields.io/badge/coroutines-1.11.0-795548.svg)](https://github.com/Kotlin/kotlinx.coroutines)
+[![Room](https://img.shields.io/badge/Room-2.8.5-E8F0FE.svg?logo=android)](https://developer.android.com/kotlin/room)
+[![SQLite](https://img.shields.io/badge/androidx.sqlite-2.7.1-E8F0FE.svg)](https://developer.android.com/kotlin/room)
+[![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
+[![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
+[![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
+[![Tests](https://img.shields.io/badge/tests-324%20green-1D6B4F.svg)](#test-coverage)
+
+**English** · [Русский](README.ru.md)
+
+</div>
 [![Maven Central](https://img.shields.io/badge/maven--central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
-[![Kotlin](https://img.shields.io/badge/kotlin-2.4.20-blue.svg?logo=kotlin)](http://kotlinlang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Kotlin Multiplatform cache with two tiers, a reactive strategy pipeline, and one API that
@@ -140,12 +154,12 @@ Requires `minSdk 23`.
 
 ```
                  ┌──────────────────────────────┐
-   get(key) ───▶ │         CachePipeline         │
+   get(key) ───▶ │         CachePipeline        │
                  └──────────────┬───────────────┘
                                 │
                     ┌───────────▼───────────┐
-                    │   CacheStrategy        │
-                    │  decides the order     │
+                    │   CacheStrategy       │
+                    │  decides the order    │
                     └───────────┬───────────┘
                                 │
               ┌─────────────────┼─────────────────┐
@@ -224,10 +238,11 @@ so cancelling a collection cannot be mistaken for a failed request.
 ```kotlin
 import io.github.slavikjunior.kache.core.CacheStrategy
 import io.github.slavikjunior.kache.core.L1MemoryCache
+import kotlin.time.Duration.Companion.seconds
 
 val cache = L1MemoryCache<String, String>(
-    maxSize = 100,              // entries before eviction starts
-    defaultTtlMs = 60_000L,     // null means entries never expire
+    maxSize = 100,          // entries before eviction starts
+    defaultTtl = 60.seconds, // null means entries never expire
 )
 
 cache.put("greeting", "hello")
@@ -248,6 +263,7 @@ leave a half-written record behind.
 import io.github.slavikjunior.kache.core.L2KmpCache
 import io.github.slavikjunior.kache.storage.FileStorageEngine
 import io.github.slavikjunior.kache.storage.KotlinxJsonSerializer
+import kotlin.time.Duration.Companion.hours
 
 // The engine overload keeps ownership with you, which you want when you also need
 // size(), seeding or closing.
@@ -256,7 +272,7 @@ val engine = FileStorageEngine("/data/local/tmp/my-cache")
 val cache = L2KmpCache<String, UserProfile>(
     storageEngine = engine,
     valueSerializer = KotlinxJsonSerializer(UserProfile.serializer()),
-    defaultTtlMs = ONE_HOUR_MS,
+    defaultTtl = 1.hours,
 )
 ```
 
@@ -290,12 +306,14 @@ configuration most apps want.
 ```kotlin
 import io.github.slavikjunior.kache.core.ChainKmpCache
 import io.github.slavikjunior.kache.core.L1MemoryCache
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.minutes
 
 val cache = ChainKmpCache<String, UserProfile>(
-    l1Cache = L1MemoryCache(maxSize = 200, defaultTtlMs = FIVE_MINUTES_MS),
+    l1Cache = L1MemoryCache(maxSize = 200, defaultTtl = 5.minutes),
     l2Storage = FileStorageEngine("/tmp/my-cache"),
     serializer = KotlinxJsonSerializer(UserProfile.serializer()),
-    defaultTtlMs = ONE_DAY_MS,
+    defaultTtl = 1.days,
 )
 ```
 
@@ -312,7 +330,7 @@ val cache = L2KmpCache<UserId, Profile>(
     storageEngine = engine,
     valueSerializer = KotlinxJsonSerializer(Profile.serializer()),
     keyToString = { it.raw },          // instead of UserId(dataClassToString=…)
-    defaultTtlMs = ONE_HOUR_MS,
+    defaultTtl = 1.hours,
 )
 ```
 
@@ -414,6 +432,8 @@ Retries default to `RetryPolicy.None`: a cache should not amplify traffic during
 
 ```kotlin
 import io.github.slavikjunior.kache.core.RetryPolicy
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 l2Cache(
     context = applicationContext,
@@ -421,8 +441,8 @@ l2Cache(
     // 3 attempts, exponential backoff, 20% jitter so clients do not retry in lockstep
     retryPolicy = RetryPolicy.Exponential(
         maxAttempts = 3,
-        initialDelayMs = 200L,
-        maxDelayMs = 2_000L,
+        initialDelay = 200.milliseconds,
+        maxDelay = 2.seconds,
         multiplier = 2.0,
         jitterRatio = 0.2,
     ),
@@ -443,12 +463,13 @@ the delay into `[1 - jitterRatio, 1]`.
 
 ```kotlin
 import io.github.slavikjunior.kache.core.MutableTimeSource
+import kotlin.time.Duration.Companion.milliseconds
 
 val clock = MutableTimeSource(initialTimeMillis = 0L)
 val cache = L1MemoryCache<String, String>(maxSize = 10, timeSource = clock)
 
-cache.put("k", "v", ttlMs = 100L)
-clock.advance(101L)
+cache.put("k", "v", ttl = 100.milliseconds)
+clock.advance(101.milliseconds)
 
 assertNull(cache.get("k"))
 ```
@@ -485,19 +506,19 @@ pull Room or WorkManager.
         ┌──────────────────────────────┐
         │  :cache-core   (commonMain)  │
         │                              │
-        │  KmpCache   ← the contract  │
-        │  CacheStrategy              │
-        │  CacheResult / CacheOrigin  │
-        │  RetryPolicy                │
-        │  L1MemoryCache              │
-        │  StorageEngine  ← the SPI   │
-        │  KacheStateHolder           │
+        │  KmpCache   ← the contract   │
+        │  CacheStrategy               │
+        │  CacheResult / CacheOrigin   │
+        │  RetryPolicy                 │
+        │  L1MemoryCache               │
+        │  StorageEngine  ← the SPI    │
+        │  KacheStateHolder            │
         └───────┬──────────────┬───────┘
                 │              │
    ┌────────────▼──────┐  ┌────▼──────────────┐
-   │  :cache-storage   │  │ :cache-store-room  │
-   │  FileStorageEngine│  │ RoomStorageEngine  │
-   │  jvmCommonMain    │  │ jvm/android/ios    │
+   │  :cache-storage   │  │ :cache-store-room │
+   │  FileStorageEngine│  │ RoomStorageEngine │
+   │  jvmCommonMain    │  │ jvm/android/ios   │
    └───────────────────┘  └───────────────────┘
 
         ┌──────────────────────────────┐
