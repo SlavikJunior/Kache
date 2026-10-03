@@ -4,138 +4,90 @@
 [![Kotlin](https://img.shields.io/badge/kotlin-2.4.20-blue.svg?logo=kotlin)](http://kotlinlang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Enterprise-grade Kotlin Multiplatform caching library with L1/L2 tiers and reactive strategy pipeline.
+A Kotlin Multiplatform cache with two tiers, a reactive strategy pipeline, and one API that
+behaves the same on Android and iOS.
 
-## Features
+```kotlin
+cache.get(
+    key = "user-42",
+    strategy = CacheStrategy.CacheFirst,
+    fetcher = { api.loadUser("42") },
+).collect { result ->
+    when (result) {
+        is CacheResult.Success -> render(result.data, origin = result.origin)
+        is CacheResult.Loading -> showSpinner()
+        is CacheResult.Error   -> showError(result.error)
+    }
+}
+```
 
-- **🎯 Multi-Tier Architecture**: L1 (in-memory) + L2 (persistent) caching with automatic promotion
-- **⚡ Reactive API**: `Flow`-based results with `CacheFirst`, `NetworkFirst`, `CacheAndNetwork`, `StaleWhileRevalidate` strategies
-- **🔄 Retry Policy**: Exponential backoff with jitter, configurable attempts
-- **⏰ TTL Management**: Per-entry and default TTL with injectable `TimeSource` for testing
-- **🛡️ Type-Safe Exceptions**: Structured `KacheException` hierarchy (`NetworkException`, `DiskReadException`, `SerializationException`, etc.)
-- **🌍 Kotlin Multiplatform**: JVM, Android, iOS (arm64, simulatorArm64, x64)
-- **📦 Zero Dependencies**: Only coroutines and datetime (transitive from `api`)
+That snippet is the whole idea: you describe *what* you want, the cache decides whether it
+comes from memory, from disk or from the network, and it tells you which one it was.
 
-## Platform Support
+---
 
-| Module | JVM | Android | iOS |
-|---|:---:|:---:|:---:|
-| `:cache-core` (L1 memory + abstractions) | ✅ | ✅ | ✅ |
-| `:cache-storage` (L2 file backend) | ✅ | ✅ | ❌ |
-| `:cache-store-room` (L2 Room/SQLite backend) | ✅ | ✅ | ✅¹ |
-| `:cache-android` (Android conveniences) | ❌ | ✅ | ❌ |
-| `:sample-android` (Compose demo app) | ❌ | ✅ | ❌ |
+## Contents
+
+- [Why another cache library](#why-another-cache-library)
+- [Platform support](#platform-support)
+- [Installation](#installation)
+- [Core concepts](#core-concepts)
+  - [Tiers and how a read flows through them](#tiers-and-how-a-read-flows-through-them)
+  - [Strategies](#strategies)
+  - [CacheOrigin: where the value came from](#cacheorigin-where-the-value-came-from)
+  - [Exceptions](#exceptions)
+- [Recipes](#recipes)
+  - [1. In-memory cache (all platforms)](#1-in-memory-cache-all-platforms)
+  - [2. Persistent file cache (JVM / Android)](#2-persistent-file-cache-jvm--android)
+  - [3. Persistent Room cache (JVM / Android / iOS)](#3-persistent-room-cache-jvm--android--ios)
+  - [4. Two-tier cache: memory in front of disk](#4-two-tier-cache-memory-in-front-of-disk)
+  - [5. Typed keys instead of strings](#5-typed-keys-instead-of-strings)
+  - [6. Caching ViewModel](#6-caching-viewmodel)
+  - [7. Clearing a cache with a screen](#7-clearing-a-cache-with-a-screen)
+  - [8. Reacting to memory pressure](#8-reacting-to-memory-pressure)
+  - [9. Retry policy](#9-retry-policy)
+  - [10. Testing TTL without waiting](#10-testing-ttl-without-waiting)
+- [Which backend should I use?](#which-backend-should-i-use)
+- [Dependencies this library brings in](#dependencies-this-library-bring-in)
+- [Architecture](#architecture)
+- [Building from source](#building-from-source)
+- [Project status](#project-status)
+- [License](#license)
+
+---
+
+## Why another cache library
+
+There are good general-purpose caches. The gap this fills is narrower:
+
+- **One API for both tiers.** Most libraries make you choose between an in-memory cache and
+  a disk cache at the type level. Here `L1MemoryCache` and a `StorageEngine` plug into the
+  same `KmpCache` contract, so promoting a value from memory to disk is not your problem.
+- **You are told where the data came from.** `CacheOrigin` distinguishes `MEMORY`,
+  `DISK`, `NETWORK`, `MEMORY_STALE` and `DISK_STALE`. That is the difference between
+  "the screen shows something" and "the screen shows something and I know it is a stale
+  revalidation that is still in flight".
+- **A refresh does not blank the screen.** `CachedState` keeps the last value while
+  `isLoading` is true. Mapping raw cache events onto a `StateFlow` would drop it.
+- **Platforms are first-class.** The same cache code runs on Android and iOS, including
+  persistent storage, through a pluggable `StorageEngine`.
+
+## Platform support
+
+| Module | JVM | Android | iOS | What it is |
+|---|:---:|:---:|:---:|---|
+| `:cache-core` | ✅ | ✅ | ✅ | L1 memory cache, strategies, `StorageEngine` SPI |
+| `:cache-storage` | ✅ | ✅ | ❌ | File-based L2 backend |
+| `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2 backend |
+| `:cache-android` | ❌ | ✅ | ❌ | Android conveniences (`l2Cache`, caching ViewModel) |
+| `:sample-android` | ❌ | ✅ | ❌ | Demo app |
 
 > ¹ `:cache-store-room` supports `iosArm64` and `iosSimulatorArm64`. There is no `iosX64`
 > variant because `androidx.sqlite` 2.7.1 does not publish one, so the dependency cannot
 > resolve for that target. `:cache-core` does support `iosX64`.
 
-## Android Conveniences
-
-`:cache-android` is a thin layer over `:cache-core` and `:cache-storage`; it adds no
-storage backend and pulls in neither Room nor WorkManager.
-
-```kotlin
-// L2 cache in the app's private cache directory
-val cache: L2KmpCache<String, User> = l2Cache(
-    context = applicationContext,
-    serializer = KotlinxJsonSerializer(serializer<User>()),
-)
-
-// Clear it when the screen goes away (pass viewModelScope)
-cache.clearWhenScopeCancelled(viewModelScope)
-
-// React to Android killing the process under memory pressure
-val callbacks = application.registerCacheMemoryPressureCallbacks(appScope, cache)
-```
-
-Intermediate trim levels such as `UI_HIDDEN` deliberately keep the data: the process is
-still alive, and clearing there would turn a survivable trim into a visible reload. Only
-`TRIM_MEMORY_COMPLETE` and `onLowMemory` evict.
-
-### Caching ViewModel
-
-`KacheableViewModel` removes the plumbing every caching screen repeats: a `StateFlow`, a
-job per read, and the mapping from cache events onto view state.
-
-```kotlin
-class ProfileViewModel(app: Application) :
-    KacheableViewModel<String, Profile>(app, cache = l2Cache(app, serializer)) {
-
-    init {
-        load(key = "profile-42", fetcher = { repository.load("profile-42") })
-    }
-}
-```
-
-```kotlin
-// The screen holds no state of its own.
-val state by viewModel.kacheState.collectAsStateWithLifecycle()
-
-Text(state.data?.name ?: "—")
-Text("origin=${state.origin}")
-if (state.isLoading) CircularProgressIndicator()
-state.error?.let { Button(onClick = viewModel::retry) { Text("Retry") } }
-```
-
-A refresh leaves `data` populated and flips `isLoading`, so the screen dims instead of
-blanking. The state type is deliberately framework-free and lives in `cache-core`, so the
-same holder works from `commonMain`, from a repository, and from Swift:
-
-```kotlin
-// Cross-platform: no Android types involved
-val holder = KacheStateHolder(scope = myScope, cache = myCache)
-holder.load(key = "profile-42", fetcher = { repository.load("profile-42") })
-```
-
-`load` is `open`, so a subclass can override it to add behaviour such as logging, without
-being forced to forward a call it does not need to change.
-
-### Tuning retries
-
-Retries default to `RetryPolicy.None`: a cache should not amplify traffic during an
-outage. Opt in when a second attempt is genuinely worth it.
-
-```kotlin
-l2Cache(
-    context = applicationContext,
-    serializer = KotlinxJsonSerializer(serializer<User>()),
-    // 3 attempts, exponential backoff, 20% jitter so clients do not retry in lockstep
-    retryPolicy = RetryPolicy.Exponential(maxAttempts = 3, initialDelayMs = 200L),
-)
-```
-
-The companion offers untuned `exponential()`, `aggressive()` (5 retries from 250 ms) and
-`fixed(attempts, delayMs)`; anything else goes through the `Exponential` constructor.
-
-> Note: the `-ktx` Lifecycle artifacts became empty aliases in 2.9. `viewModelScope` and
-> `AndroidViewModel` now live in `androidx.lifecycle:lifecycle-viewmodel`, which is what
-> this module depends on.
-
-## Sample App
-
-`:sample-android` is a single-Activity Jetpack Compose app (Material 3) that exercises
-`L2KmpCache` against `FileStorageEngine.createFromContext()` on a real device. Its
-`SampleViewModel` runs a scenario and renders one card per step:
-
-| Step | Expectation |
-|---|---|
-| Cold read with fetcher | `CacheOrigin.NETWORK` on a clean install, `CacheOrigin.DISK` if a previous run left an entry |
-| Warm read, no fetcher | `CacheOrigin.DISK` — a hit without any network |
-| Read after `invalidate` | `CacheMissException`, which also proves the file was deleted |
-| Entry left for the next launch | `StorageEngine.size() > 0`, so a relaunch reads from disk |
-
-That last step is the point of the sample: after `force-stop` + relaunch the first read
-reports `CacheOrigin.DISK`, which shows the record survived process death rather than
-living only in memory.
-
-```bash
-./gradlew :sample-android:assembleDebug
-adb install -r sample-android/build/outputs/apk/debug/sample-android-debug.apk
-```
-
-The sample deliberately does **not** depend on `:cache-store-room`: that module ships
-bundled SQLite for the JVM and cannot run on Android.
+`0.1.0` is verified against a local Maven repository only. The coordinates are not yet
+resolvable from `mavenCentral()`; see [Project status](#project-status).
 
 ## Installation
 
@@ -146,313 +98,469 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
+```
 
-// build.gradle.kts
+Then pick the modules you need. `cache-core` is the only mandatory one.
+
+```kotlin
+// build.gradle.kts of a Kotlin Multiplatform module
 kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
 
-            // Optional: file-based L2 storage (JVM/Android only)
-            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
+            // Optional L2 backends. Both expose a StorageEngine; take the one that fits.
+            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")   // JVM/Android
+            implementation("io.github.slavikjunior.kache:cache-store-room:0.1.0") // JVM/Android/iOS
         }
     }
 }
+```
 
-// JVM only: Room/SQLite L2 backend
+From a **plain Android** module (no `kotlin { }` block at all — the KMP plugin is not
+required on your side):
+
+```kotlin
+// build.gradle.kts
 dependencies {
-    implementation("io.github.slavikjunior.kache:cache-store-room:0.1.0")
+    implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
+    implementation("io.github.slavikjunior.kache:cache-android:0.1.0")
 }
 ```
 
-> **Note**: `0.1.0` is verified against a local Maven repo (`build/repo`) only. No
-> Central Portal repository is configured yet, so the coordinates are not resolvable
-> from `mavenCentral()` until the release is actually published.
+Gradle Module Metadata carries a per-platform variant, so a plain Android project resolves
+the AAR and never sees the Kotlin/Native artifacts. The only things that reach your
+classpath are `kotlin-stdlib`, `kotlinx-coroutines` and `kotlinx-datetime`.
 
-## Quick Start
+Requires `minSdk 23`.
 
-### 1. L1 Memory Cache (All Platforms)
+## Core concepts
+
+### Tiers and how a read flows through them
+
+```
+                 ┌──────────────────────────────┐
+   get(key) ───▶ │         CachePipeline         │
+                 └──────────────┬───────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │   CacheStrategy        │
+                    │  decides the order     │
+                    └───────────┬───────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                 ▼
+        ┌──────────┐     ┌──────────┐      ┌────────────┐
+        │   L1     │     │ fetcher  │      │    L2      │
+        │  memory  │     │ network  │      │  Storage   │
+        │  (LRU)   │     │          │      │  Engine    │
+        └──────────┘     └──────────┘      └────────────┘
+```
+
+- **L1** is `L1MemoryCache`: an LRU map with optional per-entry TTL, guarded by a
+  `Mutex` so it is safe under concurrency.
+- **L2** is anything implementing `StorageEngine`. It is reached only when L1 misses, and
+  a value read from L2 is promoted into L1 automatically.
+- **The fetcher** is your lambda. The cache calls it only when the chosen strategy needs
+  it, so a satisfied cache never touches the network.
+
+A hit on L2 returns `CacheOrigin.DISK`; the same value on the next call returns
+`CacheOrigin.MEMORY`, because it was promoted.
+
+### Strategies
+
+| Strategy | Behaviour | Emits |
+|---|---|---|
+| `CacheFirst` | Serve fresh cache; fetch only on a miss. Expired counts as a miss. | one state |
+| `NetworkFirst` | Fetch first; fall back to cache when the fetch fails. | one state |
+| `CacheAndNetwork` | Show the cached value immediately, then refresh. | up to two states |
+| `StaleWhileRevalidate` | Show the cached value *even if expired*, then refresh. | up to two states |
+
+Two details worth knowing:
+
+- With `CacheFirst`, an expired record is treated as a miss, so a client never receives
+  data it would immediately discard.
+- With `NetworkFirst`, a failed fetch is **not** reported when cache can take its place —
+  the cached value is emitted with its real origin instead.
+
+### CacheOrigin: where the value came from
 
 ```kotlin
-import io.github.slavikjunior.kache.core.*
-import kotlinx.coroutines.flow.collect
+enum class CacheOrigin {
+    MEMORY, MEMORY_STALE,   // read from the in-memory tier
+    DISK, DISK_STALE,       // read from persistent storage
+    NETWORK,                // produced by the fetcher
+}
+```
 
-// Create L1 cache with LRU eviction (maxSize=100) and 5-minute default TTL
-val cache = L1MemoryCache<String, User>(
-    maxSize = 100,
-    defaultTtlMs = 5 * 60 * 1000,
-    timeSource = SystemTimeSource
+The `_STALE` values only appear with `StaleWhileRevalidate`: they tell you that what is on
+screen has already outlived its TTL and a refresh is running behind it.
+
+### Exceptions
+
+Everything the library throws is a `KacheException`, so one `catch` covers it:
+
+```kotlin
+sealed class KacheException : Exception {
+    class NetworkException(cause)          // the fetcher failed
+    class CacheMissException(message)      // nothing cached and no fetcher
+    class ExpiredException(key)            // entry expired
+    class DiskReadException(cause)
+    class DiskWriteException(cause)
+    class SerializationException(cause)
+    class UnknownKacheException(cause)
+}
+```
+
+Cancellation is never wrapped: a cancelled coroutine is rethrown as `CancellationException`,
+so cancelling a collection cannot be mistaken for a failed request.
+
+---
+
+## Recipes
+
+### 1. In-memory cache (all platforms)
+
+```kotlin
+import io.github.slavikjunior.kache.core.CacheStrategy
+import io.github.slavikjunior.kache.core.L1MemoryCache
+
+val cache = L1MemoryCache<String, String>(
+    maxSize = 100,              // entries before eviction starts
+    defaultTtlMs = 60_000L,     // null means entries never expire
 )
 
-// Fetch with CacheFirst strategy (check cache -> network on miss)
-cache.get(
-    key = "user:123",
-    strategy = CacheStrategy.CacheFirst,
-    fetcher = { key -> api.fetchUser(key) }
-).collect { result ->
-    when (result) {
-        is CacheResult.Success -> {
-            println("User: ${result.data}, from: ${result.origin}")
-        }
-        is CacheResult.Error -> {
-            println("Failed: ${result.error}")
-            result.cachedData?.let { println("Fallback: $it") }
-        }
-        is CacheResult.Loading -> {
-            println("Loading... (cached: ${result.cachedData})")
-        }
+cache.put("greeting", "hello")
+cache.get("greeting")          // StorageRecord<String>?
+cache.size()                   // entries held
+cache.removeExpired()          // reaps what TTL has passed
+```
+
+`get` returns `null` for a missing *or* expired key and drops it as a side effect. Use
+`getStale` when you deliberately want an expired value.
+
+### 2. Persistent file cache (JVM / Android)
+
+One file per key, written atomically through a temporary file, so a crash mid-write cannot
+leave a half-written record behind.
+
+```kotlin
+import io.github.slavikjunior.kache.core.L2KmpCache
+import io.github.slavikjunior.kache.storage.FileStorageEngine
+import io.github.slavikjunior.kache.storage.KotlinxJsonSerializer
+
+// The engine overload keeps ownership with you, which you want when you also need
+// size(), seeding or closing.
+val engine = FileStorageEngine("/data/local/tmp/my-cache")
+
+val cache = L2KmpCache<String, UserProfile>(
+    storageEngine = engine,
+    valueSerializer = KotlinxJsonSerializer(UserProfile.serializer()),
+    defaultTtlMs = ONE_HOUR_MS,
+)
+```
+
+On Android there is a `Context`-based shortcut — see [recipe 6](#6-caching-viewmodel) and
+the `l2Cache` factory below.
+
+### 3. Persistent Room cache (JVM / Android / iOS)
+
+Useful when you want an indexable store, or when the cache has to live on a platform where
+a plain file API is awkward. On iOS this is the **only** L2 backend.
+
+```kotlin
+// JVM: a file path whose parent directory already exists
+val cache = createFromFile("/tmp/kache.db")
+
+// Android: the app's private files directory
+val cache = createFromContext(applicationContext, "kache.db")
+
+// iOS: the app's caches directory
+val cache = createFromCachesDirectory("kache.db")
+```
+
+Every factory returns a `RoomStorageEngine`, which is a `StorageEngine` — feed it to any of
+the cache classes exactly like the file engine.
+
+### 4. Two-tier cache: memory in front of disk
+
+`ChainKmpCache` puts `L1MemoryCache` in front of any `StorageEngine`. This is the
+configuration most apps want.
+
+```kotlin
+import io.github.slavikjunior.kache.core.ChainKmpCache
+import io.github.slavikjunior.kache.core.L1MemoryCache
+
+val cache = ChainKmpCache<String, UserProfile>(
+    l1Cache = L1MemoryCache(maxSize = 200, defaultTtlMs = FIVE_MINUTES_MS),
+    l2Storage = FileStorageEngine("/tmp/my-cache"),
+    serializer = KotlinxJsonSerializer(UserProfile.serializer()),
+    defaultTtlMs = ONE_DAY_MS,
+)
+```
+
+Both tiers are given the same clock, so they cannot disagree about expiry — a value L1
+considers fresh will not be reported as fresh while L2 disagrees.
+
+### 5. Typed keys instead of strings
+
+Keys are typed by default and converted with `toString()`, which is fine for IDs and unsafe
+for data classes. Supply your own mapping:
+
+```kotlin
+val cache = L2KmpCache<UserId, Profile>(
+    storageEngine = engine,
+    valueSerializer = KotlinxJsonSerializer(Profile.serializer()),
+    keyToString = { it.raw },          // instead of UserId(dataClassToString=…)
+    defaultTtlMs = ONE_HOUR_MS,
+)
+```
+
+The mapping must produce a distinct string per key: distinct keys can collide onto the
+same file, which is a silent data-loss bug rather than an error.
+
+### 6. Caching ViewModel
+
+`KacheableViewModel` removes the plumbing every caching screen repeats: a `StateFlow`, a
+job per read, and the mapping from cache events onto view state.
+
+```kotlin
+import io.github.slavikjunior.kache.android.KacheableViewModel
+import io.github.slavikjunior.kache.android.l2Cache
+import io.github.slavikjunior.kache.storage.KotlinxJsonSerializer
+
+class ProfileViewModel(application: Application) :
+    KacheableViewModel<String, Profile>(
+        application = application,
+        cache = l2Cache(application, KotlinxJsonSerializer(Profile.serializer())),
+    ) {
+
+    init {
+        load(key = "profile-42", fetcher = { repository.load("profile-42") })
     }
 }
-
-// Write to cache with custom TTL
-cache.put("user:123", user, ttlMs = 10 * 60 * 1000)
-
-// Invalidate entry
-cache.invalidate("user:123")
-
-// Clear all
-cache.clear()
 ```
 
-### 2. L2 Persistent Cache (JVM/Android)
+The screen then holds no state of its own:
 
 ```kotlin
-import io.github.slavikjunior.kache.core.*
-import io.github.slavikjunior.kache.storage.*
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.serializer
+val state by viewModel.kacheState.collectAsStateWithLifecycle()
 
-@Serializable
-data class User(val id: String, val name: String)
+Text(state.data?.name ?: "—")
+Text("origin=${state.origin}")
+if (state.isLoading) CircularProgressIndicator()
+state.error?.let { Button(onClick = viewModel::retry) { Text("Retry") } }
+```
 
-// Create L2 cache backed by file storage.
-// On Android use FileStorageEngine.createFromContext(context) instead.
-val cache = L2KmpCache(
-    storageEngine = FileStorageEngine(rootDirectory = "/path/to/cache"),
-    valueSerializer = KotlinxJsonSerializer(serializer<User>()),
-    keyToString = { it }, // Use key.toString() as storage key
-    defaultTtlMs = 24 * 60 * 60 * 1000, // 24 hours
-    retryPolicy = RetryPolicy.Exponential(maxAttempts = 3, initialDelayMs = 100),
-    timeSource = SystemTimeSource
+`CachedState` keeps `data` populated while `isLoading` is true, so a refresh dims the
+screen instead of blanking it. An error may still carry a usable fallback, which is why an
+error does not imply empty state.
+
+The state type is deliberately framework-free and lives in `:cache-core`, so the same
+holder works outside a ViewModel:
+
+```kotlin
+// Cross-platform: no Android types involved
+val holder = KacheStateHolder(scope = myScope, cache = myCache)
+holder.load(key = "profile-42", fetcher = { repository.load("profile-42") })
+```
+
+`load` is `open`, so a subclass can override it to add logging or analytics without being
+forced to forward a call it does not need to change.
+
+**Do not put the cache itself in the ViewModel.** A ViewModel is destroyed on every
+configuration change, so a cache held in one loses its in-memory tier on each rotation. The
+sample application keeps its cache in a process-scoped holder for exactly this reason.
+
+### 7. Clearing a cache with a screen
+
+```kotlin
+import io.github.slavikjunior.kache.android.clearWhenScopeCancelled
+
+// Clears when the ViewModel goes away. The returned Job completes once the eviction has
+// actually happened, so it is awaitable in tests.
+cache.clearWhenScopeCancelled(viewModelScope)
+```
+
+The extension fires when the scope finishes, whether it was cancelled or completed. The
+clearing deliberately does **not** run inside that scope: it is already finished by then,
+so work launched there would either be cancelled immediately or deadlock a caller awaiting
+the returned job.
+
+Use an application-scoped scope instead when the cache must outlive every screen.
+
+### 8. Reacting to memory pressure
+
+```kotlin
+import io.github.slavikjunior.kache.android.registerCacheMemoryPressureCallbacks
+import io.github.slavikjunior.kache.android.unregisterCacheMemoryPressureCallbacks
+
+val callbacks = application.registerCacheMemoryPressureCallbacks(appScope, cache)
+// ...
+application.unregisterCacheMemoryPressureCallbacks(callbacks)
+```
+
+Only `TRIM_MEMORY_COMPLETE` and `onLowMemory` evict. Intermediate levels such as
+`TRIM_MEMORY_UI_HIDDEN` deliberately keep the data: the process is still alive and fully
+expected back, and clearing there would turn a trim the system considers survivable into a
+visible reload.
+
+Unregister when the caches go away, otherwise the application retains them for the rest of
+the process lifetime.
+
+### 9. Retry policy
+
+Retries default to `RetryPolicy.None`: a cache should not amplify traffic during an outage.
+
+```kotlin
+import io.github.slavikjunior.kache.core.RetryPolicy
+
+l2Cache(
+    context = applicationContext,
+    serializer = KotlinxJsonSerializer(Profile.serializer()),
+    // 3 attempts, exponential backoff, 20% jitter so clients do not retry in lockstep
+    retryPolicy = RetryPolicy.Exponential(
+        maxAttempts = 3,
+        initialDelayMs = 200L,
+        maxDelayMs = 2_000L,
+        multiplier = 2.0,
+        jitterRatio = 0.2,
+    ),
 )
-
-cache.get(
-    key = "user:123",
-    strategy = CacheStrategy.NetworkFirst, // Always try network first
-    fetcher = { api.fetchUser(it) }
-).collect { result ->
-    // Handle result
-}
 ```
 
-### 3. L1+L2 Two-Tier Cache (JVM/Android)
+Shortcuts: `RetryPolicy.aggressive()` is 5 attempts from 250 ms; `RetryPolicy.fixed(n, ms)`
+retries every `ms`; `RetryPolicy.Exponential(...)` takes the full schedule. Jitter scales
+the delay into `[1 - jitterRatio, 1]`.
+
+> The `-ktx` Lifecycle artifacts became empty aliases in 2.9. `viewModelScope` and
+> `AndroidViewModel` now live in `androidx.lifecycle:lifecycle-viewmodel`, which is what
+> `:cache-android` depends on.
+
+### 10. Testing TTL without waiting
+
+`TimeSource` is injectable, so expiry is deterministic and no test ever sleeps.
 
 ```kotlin
-// Combine memory (L1) + disk (L2) with automatic promotion
-val cache = ChainKmpCache(
-    l1Cache = L1MemoryCache(maxSize = 50),
-    l2Storage = FileStorageEngine("/cache"),
-    serializer = KotlinxJsonSerializer(serializer<User>()),
-    keyToString = { it },
-    defaultTtlMs = 60 * 60 * 1000,
-    retryPolicy = RetryPolicy.fixed(attempts = 2, delayMs = 200),
-    timeSource = SystemTimeSource
-)
+import io.github.slavikjunior.kache.core.MutableTimeSource
 
-// CacheFirst: Check L1 -> L2 -> Network
-// On L2 hit, value is promoted to L1 automatically
-cache.get("user:123", CacheStrategy.CacheFirst) {
-    api.fetchUser(it)
-}.collect { /* ... */ }
+val clock = MutableTimeSource(initialTimeMillis = 0L)
+val cache = L1MemoryCache<String, String>(maxSize = 10, timeSource = clock)
+
+cache.put("k", "v", ttlMs = 100L)
+clock.advance(101L)
+
+assertNull(cache.get("k"))
 ```
 
-### 4. L2 Room/SQLite Cache (JVM)
+---
 
-```kotlin
-import io.github.slavikjunior.kache.core.*
-import io.github.slavikjunior.kache.store.room.*
-import kotlinx.serialization.serializer
+## Which backend should I use?
 
-// Bundled native SQLite: no external JDBC driver and no Android framework required.
-// Pick the entry point for the platform:
-//   JVM      — createFromFile("/var/data/kache.db")
-//   Android  — createFromContext(context)
-//   iOS      — createFromCachesDirectory()
-val engine: StorageEngine = createFromFile("/var/data/kache.db")
+| You want | Use |
+|---|---|
+| Memory only, or a shared UI cache | `L1MemoryCache` |
+| Fast local disk, one file per key, no schema | `:cache-storage` (`FileStorageEngine`) |
+| Indexed storage, migrations, or the only option on iOS | `:cache-store-room` (Room) |
+| Memory in front of disk | `ChainKmpCache` + any `StorageEngine` |
 
-val cache = L2KmpCache(
-    storageEngine = engine,
-    valueSerializer = KotlinxJsonSerializer(serializer<User>()),
-    keyToString = { it },
-    defaultTtlMs = 24 * 60 * 60 * 1000,
-    timeSource = SystemTimeSource
-)
+Implement `StorageEngine` to add your own. It is five suspend functions, and the library
+never assumes anything beyond them.
 
-// Expired records can be reaped in bulk
-val removed = engine.removeExpired(now = System.currentTimeMillis())
-```
+## Dependencies this library brings in
 
-For full control over the Room configuration (migrations, callbacks, journal mode),
-build the database yourself and pass it in:
+| Module | Transitive dependencies |
+|---|---|
+| `:cache-core` | `kotlinx-coroutines-core`, `kotlinx-datetime` |
+| `:cache-storage` | the above + `kotlinx-serialization-json` |
+| `:cache-store-room` | the above + `androidx.room`, `androidx.sqlite` |
+| `:cache-android` | the above + `androidx.lifecycle:lifecycle-viewmodel` |
 
-```kotlin
-val db = Room.databaseBuilder<KacheDatabase>(name = "/var/data/kache.db")
-    .setDriver(BundledSQLiteDriver())
-    .fallbackToDestructiveMigration(dropAllTables = true)
-    .build()
-
-val engine = RoomStorageEngineFactory.create(db)
-```
-
-### 5. Strategies
-
-```kotlin
-// CacheFirst: Use cached value if available, fetch on miss
-cache.get(key, CacheStrategy.CacheFirst, fetcher)
-
-// NetworkFirst: Always try network, fallback to cache on error
-cache.get(key, CacheStrategy.NetworkFirst, fetcher)
-
-// CacheAndNetwork: Return cache immediately, then refresh from network
-cache.get(key, CacheStrategy.CacheAndNetwork, fetcher)
-// Emits: Success(data, MEMORY_STALE) -> Success(freshData, NETWORK)
-
-// StaleWhileRevalidate: Return even-expired cache, refresh in background
-cache.get(key, CacheStrategy.StaleWhileRevalidate, fetcher)
-// Expired record still returned as Success(data, DISK_STALE)
-```
-
-### 6. Retry Policies
-
-```kotlin
-// No retries (default)
-RetryPolicy.None
-
-// Exponential backoff: 100ms, 200ms, 400ms
-RetryPolicy.Exponential(maxAttempts = 3, initialDelayMs = 100)
-
-// Convenience presets
-RetryPolicy.exponential() // 3 attempts, 100ms initial
-RetryPolicy.aggressive()  // 5 retries, 250ms initial
-RetryPolicy.fixed(attempts = 2, delayMs = 500)
-```
-
-### 7. Testing with MutableTimeSource
-
-```kotlin
-import io.github.slavikjunior.kache.core.*
-
-@Test
-fun `expired entries are not returned`() = runTest {
-    val time = MutableTimeSource(initialTimeMillis = 1000)
-    val cache = L1MemoryCache<String, Int>(
-        maxSize = 10,
-        defaultTtlMs = 500,
-        timeSource = time
-    )
-    
-    cache.put("key", 42)
-    
-    // Advance clock past expiry
-    time.advance(600)
-    
-    val result = cache.get("key").first()
-    assertTrue(result is CacheResult.Error)
-    assertTrue((result as CacheResult.Error).error is KacheException.CacheMissException)
-}
-```
+No UI toolkit, no DI framework, no logging facade. `:cache-android` deliberately does not
+pull Room or WorkManager.
 
 ## Architecture
 
 ```
-[ UI / ViewModel ]
-    │
-    ▼
-[ Kache Pipeline ] ← strategy logic (CacheFirst, NetworkFirst, etc.)
-    ├─────────────┬───────────────┐
-    ▼             ▼               ▼
-┌─────────┐  ┌─────────┐   ┌──────────┐
-│ L1 (LRU)│  │ L2 (FS) │   │  Fetcher │
-│ Memory  │  │  Disk   │   │ (Network)│
-└─────────┘  └─────────┘   └──────────┘
+        ┌──────────────────────────────┐
+        │  :cache-core   (commonMain)  │
+        │                              │
+        │  KmpCache   ← the contract  │
+        │  CacheStrategy              │
+        │  CacheResult / CacheOrigin  │
+        │  RetryPolicy                │
+        │  L1MemoryCache              │
+        │  StorageEngine  ← the SPI   │
+        │  KacheStateHolder           │
+        └───────┬──────────────┬───────┘
+                │              │
+   ┌────────────▼──────┐  ┌────▼──────────────┐
+   │  :cache-storage   │  │ :cache-store-room  │
+   │  FileStorageEngine│  │ RoomStorageEngine  │
+   │  jvmCommonMain    │  │ jvm/android/ios    │
+   └───────────────────┘  └───────────────────┘
+
+        ┌──────────────────────────────┐
+        │  :cache-android  (android)   │
+        │  l2Cache, KacheableViewModel │
+        │  clearWhenScopeCancelled     │
+        │  memory-pressure callbacks   │
+        └──────────────────────────────┘
 ```
 
-`L2` is pluggable: `:cache-storage` ships a file backend, `:cache-store-room` a Room/SQLite backend.
+`:cache-core` owns policy and depends on nothing but coroutines. The backends depend on it,
+never on each other. `:cache-android` is a convenience layer and adds no storage.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed design.
+`FileStorageEngine` lives in a `jvmCommonMain` source set because JVM and Android share the
+same `java.io` implementation; it was previously duplicated per platform.
 
-## Documentation
-
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Project Backlog](docs/BACKLOG.md)
-- [Core Domain Spec](docs/specs/01_core_domain_spec.md)
-- [L1 Memory Cache Spec](docs/specs/02_l1_memory_cache.md)
-- [Platform Coverage & Release Spec](docs/specs/03_platform_coverage_and_release_spec.md)
-- [Engineering Metrics](docs/METRICS.md)
-- [Article & Talk Outline](docs/ARTICLE_OUTLINE.md)
-- [KDoc API Reference](cache-core/build/dokka/html/index.html) (generate with `./gradlew dokkaGeneratePublicationHtml`; output is per module under `<module>/build/dokka/html/`)
-
-## Building
+## Building from source
 
 ```bash
-# Compile all targets
-./gradlew assemble
-
-# Run tests (JVM, Android host, iOS simulator)
-./gradlew check
-
-# Publish to local Maven repo (build/repo)
+./gradlew check                    # tests: JVM, Android host, iOS simulator
+./gradlew apiCheck                 # binary-compatibility check
+./gradlew :sample-android:assembleDebug
 ./gradlew publishAllPublicationsToLocalRepository
-
-# Generate KDoc HTML (per module: <module>/build/dokka/html/)
-./gradlew dokkaGeneratePublicationHtml
 ```
 
-### Verified release state
+iOS compilation and linking must be requested explicitly, because `./gradlew check` does not
+prove them — `iosX64Test` is disabled on Apple Silicon and `iosArm64Test` needs a physical
+device:
 
-`0.1.0` publishes to the local repo at `build/repo` with a `javadoc`-classified JAR, a
-`sources` JAR and full POM metadata on every publication. Two things are still missing
-before the artifacts can go to Maven Central:
+```bash
+./gradlew :cache-core:compileKotlinIosArm64 \
+          :cache-core:compileKotlinIosSimulatorArm64 \
+          :cache-core:compileKotlinIosX64 \
+          :cache-core:iosArm64MainBinaries \
+          :cache-core:iosSimulatorArm64MainBinaries \
+          :cache-core:iosX64MainBinaries
+```
 
-- **No GPG signature.** Export `SIGNING_KEY` and `SIGNING_PASSWORD` as env vars or Gradle
-  properties; signing is skipped while they are absent, which is what keeps local
-  publication working.
-- **No Central Portal repository.** Only the `local` repository is configured, in
-  `KachePublishConventionPlugin`.
+## Project status
 
-Binary-compatibility dumps cover the JVM artifacts (`api/jvm/`) and the iOS KLib ABI
-(`api/*.klib.api`). The Android target is the one gap: BCV hooks a KMP Android target only
-when its compilation is named `release`, while the AGP Kotlin Multiplatform plugin exposes
-`main`, so no Android dump is produced. The Android-only public surface is kept to a single
-`createFromContext` function, and upgrading BCV did not change this behaviour.
+`0.1.0`. All seven roadmap phases are implemented.
 
-CI lives in `.github/workflows/ci.yml`: JVM + Android tests and the sample on Linux, iOS
-compile/link and simulator tests on macOS, and a local-publication dry run.
+**Test coverage** — 324 tests, green on every host:
 
-## Roadmap
+| Module | JVM | Android host | iOS simulator |
+|---|---:|---:|---:|
+| `:cache-core` | 82 | 82 | 82 |
+| `:cache-storage` | 27 | — | — |
+| `:cache-store-room` | 11 | 7 | 11 |
+| `:cache-android` | — | 22 | — |
 
-- ✅ **Phase 1-3**: Core abstractions, L1 memory cache, strategy pipeline
-- ✅ **Phase 4**: L2 backends (✅ file, ✅ Room/SQLite on JVM + Android + iOS)
-- ✅ **Phase 5**: Android KTX (`:cache-android`, ViewModel scope, memory pressure; WorkManager deliberately descoped)
-- ✅ **Phase 6**: Library readiness (API exposure, explicitApi, Maven Publish, Dokka, BCV)
-- ✅ **Phase 7**: AI SDLC metrics ([docs/METRICS.md](docs/METRICS.md)), article outline ([docs/ARTICLE_OUTLINE.md](docs/ARTICLE_OUTLINE.md))
+**Known gaps, stated plainly:**
 
-See [`docs/BACKLOG.md`](docs/BACKLOG.md) for details.
-
-## Requirements
-
-- **Kotlin**: 2.4.20+
-- **Coroutines**: 1.11.0+
-- **Targets**: JVM 17+, Android API 23+, iOS 13+
+- The **Android public API is not covered by binary-compatibility validation.** BCV hooks a
+  KMP Android target only when its compilation is named `release`, while the AGP KMP plugin
+  names it `main`, so `:cache-android` publishes an AAR with no golden API file. The gap is
+  mitigated by tests, not closed.
+- `RoomStorageEngineFactory.createFromContext` is not exercised at runtime in a host test:
+  the bundled SQLite driver ships a JNI library built for Android ABIs and cannot load in a
+  host JVM test. It is covered by compilation, by the published AAR and by the sample app.
+- Not yet published to Maven Central. See `docs/` locally or the release notes for the
+  remaining manual steps (namespace verification and the Portal User Token).
 
 ## License
 
-[MIT License](LICENSE)
-
-## Contributing
-
-Contributions are welcome! Please read [`AGENTS.md`](AGENTS.md) for development workflow and architecture constraints.
-
----
-
-**Built with ❤️ and AI assistance** — This project explores the intersection of enterprise KMP development and AI-powered SDLC.
+MIT. See [LICENSE](LICENSE).
