@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 /** Value written to the cache by the sample. */
 @Serializable
@@ -249,8 +251,8 @@ private object SampleCache {
             // `fixed()`, so a custom schedule goes through the constructor directly.
             retryPolicy = RetryPolicy.Exponential(
                 maxAttempts = 3,
-                initialDelayMs = 200L,
-                maxDelayMs = 2_000L,
+                initialDelay = 200.milliseconds,
+                maxDelay = 2.seconds,
                 multiplier = 2.0,
                 jitterRatio = 0.2,
             ),
