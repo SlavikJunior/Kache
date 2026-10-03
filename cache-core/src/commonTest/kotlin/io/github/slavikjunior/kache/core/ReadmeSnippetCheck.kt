@@ -2,6 +2,11 @@ package io.github.slavikjunior.kache.core
 
 import kotlinx.coroutines.flow.Flow
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.days
 import kotlin.test.assertNotNull
 
 /**
@@ -29,16 +34,16 @@ class ReadmeSnippetCheck {
         )
 
     private suspend fun recipe1(): Any {
-        val cache = L1MemoryCache<String, String>(maxSize = 100, defaultTtlMs = 60_000L)
+        val cache = L1MemoryCache<String, String>(maxSize = 100, defaultTtl = 60.seconds)
         return listOf(cache.put("greeting", "hello"), cache.get("greeting"), cache.size(), cache.removeExpired())
     }
 
     private fun recipe4(engine: StorageEngine): Any {
         return ChainKmpCache<String, String>(
-            l1Cache = L1MemoryCache(maxSize = 200, defaultTtlMs = 5 * 60_000L),
+            l1Cache = L1MemoryCache(maxSize = 200, defaultTtl = 5.minutes),
             l2Storage = engine,
             serializer = StringSerializer(),
-            defaultTtlMs = 86_400_000L,
+            defaultTtl = 1.days,
         )
     }
 
@@ -46,7 +51,7 @@ class ReadmeSnippetCheck {
         storageEngine = engine,
         valueSerializer = StringSerializer(),
         keyToString = { it.toString() },
-        defaultTtlMs = 3_600_000L,
+        defaultTtl = 1.hours,
     )
 
     private fun recipe9(): Any = RetryPolicy.Exponential(
@@ -67,8 +72,8 @@ class ReadmeSnippetCheck {
     private suspend fun recipe10(): Any? {
         val clock = MutableTimeSource(initialTimeMillis = 0L)
         val cache = L1MemoryCache<String, String>(maxSize = 10, timeSource = clock)
-        cache.put("k", "v", ttlMs = 100L)
-        clock.advance(101L)
+        cache.put("k", "v", ttl = 100.milliseconds)
+        clock.advance(101.milliseconds)
         val afterExpiry: StorageRecord<String>? = cache.get("k")
         return afterExpiry
     }

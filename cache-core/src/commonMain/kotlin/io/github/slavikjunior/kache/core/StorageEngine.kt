@@ -62,7 +62,7 @@ public interface StorageEngine {
     /**
      * Removes all expired records from storage.
      *
-     * A record is expired when `createdAt + ttlMillis < now`. Records with null TTL
+     * A record is expired when `createdAt + ttl < now`. Records with null TTL
      * are never expired.
      *
      * Default implementation does nothing and returns 0 (no breaking change for existing backends).

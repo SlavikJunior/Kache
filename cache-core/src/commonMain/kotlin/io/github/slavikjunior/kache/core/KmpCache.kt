@@ -1,6 +1,7 @@
 package io.github.slavikjunior.kache.core
 
 import kotlinx.coroutines.flow.Flow
+import kotlin.time.Duration
 
 /** Cross-platform cache contract used by all Kache storage implementations. */
 public interface KmpCache<K, V> {
@@ -22,8 +23,13 @@ public interface KmpCache<K, V> {
         fetcher: (suspend (K) -> V)? = null
     ): Flow<CacheResult<V>>
 
-    /** Stores [value] for [key], optionally limiting its lifetime with [ttlMs]. */
-    public suspend fun put(key: K, value: V, ttlMs: Long? = null)
+    /**
+     * Stores [value] for [key], optionally limiting its lifetime with [ttl].
+     *
+     * @param ttl How long the entry stays fresh, or null for the implementation's default.
+     *   A null argument uses the TTL the cache was created with, not "no expiry".
+     */
+    public suspend fun put(key: K, value: V, ttl: Duration? = null)
 
     /** Removes the entry associated with [key]. */
     public suspend fun invalidate(key: K)

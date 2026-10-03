@@ -1,6 +1,7 @@
 package io.github.slavikjunior.kache.core
 
 import kotlinx.coroutines.flow.Flow
+import kotlin.time.Duration
 
 /**
  * A single-tier cache built directly on a [StorageEngine], with no in-memory tier.
@@ -16,8 +17,8 @@ import kotlinx.coroutines.flow.Flow
  * @param valueSerializer Serializer used to encode values on write and decode them on read.
  * @param keyToString Maps a typed key to the string key used by [storageEngine]. Override
  *   when the default [Any.toString] is not stable or safe as a storage key.
- * @param defaultTtlMs TTL in milliseconds applied on write when the caller gives none.
- *   Null means entries never expire. A [put] with no [ttlMs] falls back to this.
+ * @param defaultTtl How long entries stay fresh when a write carries no TTL of its own.
+ *   Null means entries never expire.
  * @param timeSource Clock used to decide whether a record has expired. Inject a
  *   [MutableTimeSource] to test expiry without waiting.
  * @param retryPolicy How a failing fetcher is retried. [RetryPolicy.None] by default, so
@@ -27,7 +28,7 @@ public class L2KmpCache<K : Any, V : Any>(
     private val storageEngine: StorageEngine,
     private val valueSerializer: KacheSerializer<V>,
     private val keyToString: (K) -> String = { it.toString() },
-    private val defaultTtlMs: Long? = null,
+    private val defaultTtl: Duration? = null,
     timeSource: TimeSource = SystemTimeSource,
     private val retryPolicy: RetryPolicy = RetryPolicy.None,
 ) : KmpCache<K, V> {
@@ -36,7 +37,7 @@ public class L2KmpCache<K : Any, V : Any>(
 
     private val pipeline = CachePipeline<K, V>(
         tier = tier,
-        defaultTtlMs = defaultTtlMs,
+        defaultTtl = defaultTtl,
         retryPolicy = retryPolicy,
     )
 
@@ -46,8 +47,8 @@ public class L2KmpCache<K : Any, V : Any>(
         fetcher: (suspend (K) -> V)?,
     ): Flow<CacheResult<V>> = pipeline.execute(key, strategy, fetcher)
 
-    override suspend fun put(key: K, value: V, ttlMs: Long?) {
-        tier.write(key, value, ttlMs ?: defaultTtlMs)
+    override suspend fun put(key: K, value: V, ttl: Duration?) {
+        tier.write(key, value, ttl ?: defaultTtl)
     }
 
     override suspend fun invalidate(key: K) {

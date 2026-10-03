@@ -41,7 +41,7 @@ abstract interface <#A: kotlin/Any?, #B: kotlin/Any?> io.github.slavikjunior.kac
     abstract fun get(#A, io.github.slavikjunior.kache.core/CacheStrategy = ..., kotlin.coroutines/SuspendFunction1<#A, #B>? = ...): kotlinx.coroutines.flow/Flow<io.github.slavikjunior.kache.core/CacheResult<#B>> // io.github.slavikjunior.kache.core/KmpCache.get|get(1:0;io.github.slavikjunior.kache.core.CacheStrategy;kotlin.coroutines.SuspendFunction1<1:0,1:1>?){}[0]
     abstract suspend fun clear() // io.github.slavikjunior.kache.core/KmpCache.clear|clear(){}[0]
     abstract suspend fun invalidate(#A) // io.github.slavikjunior.kache.core/KmpCache.invalidate|invalidate(1:0){}[0]
-    abstract suspend fun put(#A, #B, kotlin/Long? = ...) // io.github.slavikjunior.kache.core/KmpCache.put|put(1:0;1:1;kotlin.Long?){}[0]
+    abstract suspend fun put(#A, #B, kotlin.time/Duration? = ...) // io.github.slavikjunior.kache.core/KmpCache.put|put(1:0;1:1;kotlin.time.Duration?){}[0]
 }
 
 abstract interface <#A: kotlin/Any?> io.github.slavikjunior.kache.core/KacheSerializer { // io.github.slavikjunior.kache.core/KacheSerializer|null[0]
@@ -145,21 +145,21 @@ sealed interface io.github.slavikjunior.kache.core/RetryPolicy { // io.github.sl
 }
 
 final class <#A: kotlin/Any, #B: kotlin/Any> io.github.slavikjunior.kache.core/L2KmpCache : io.github.slavikjunior.kache.core/KmpCache<#A, #B> { // io.github.slavikjunior.kache.core/L2KmpCache|null[0]
-    constructor <init>(io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin/Long? = ..., io.github.slavikjunior.kache.core/TimeSource = ..., io.github.slavikjunior.kache.core/RetryPolicy = ...) // io.github.slavikjunior.kache.core/L2KmpCache.<init>|<init>(io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.Long?;io.github.slavikjunior.kache.core.TimeSource;io.github.slavikjunior.kache.core.RetryPolicy){}[0]
+    constructor <init>(io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/TimeSource = ..., io.github.slavikjunior.kache.core/RetryPolicy = ...) // io.github.slavikjunior.kache.core/L2KmpCache.<init>|<init>(io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.time.Duration?;io.github.slavikjunior.kache.core.TimeSource;io.github.slavikjunior.kache.core.RetryPolicy){}[0]
 
     final fun get(#A, io.github.slavikjunior.kache.core/CacheStrategy, kotlin.coroutines/SuspendFunction1<#A, #B>?): kotlinx.coroutines.flow/Flow<io.github.slavikjunior.kache.core/CacheResult<#B>> // io.github.slavikjunior.kache.core/L2KmpCache.get|get(1:0;io.github.slavikjunior.kache.core.CacheStrategy;kotlin.coroutines.SuspendFunction1<1:0,1:1>?){}[0]
     final suspend fun clear() // io.github.slavikjunior.kache.core/L2KmpCache.clear|clear(){}[0]
     final suspend fun invalidate(#A) // io.github.slavikjunior.kache.core/L2KmpCache.invalidate|invalidate(1:0){}[0]
-    final suspend fun put(#A, #B, kotlin/Long?) // io.github.slavikjunior.kache.core/L2KmpCache.put|put(1:0;1:1;kotlin.Long?){}[0]
+    final suspend fun put(#A, #B, kotlin.time/Duration?) // io.github.slavikjunior.kache.core/L2KmpCache.put|put(1:0;1:1;kotlin.time.Duration?){}[0]
 }
 
 final class <#A: kotlin/Any?, #B: kotlin/Any?> io.github.slavikjunior.kache.core/ChainKmpCache : io.github.slavikjunior.kache.core/KmpCache<#A, #B> { // io.github.slavikjunior.kache.core/ChainKmpCache|null[0]
-    constructor <init>(io.github.slavikjunior.kache.core/L1MemoryCache<#A, #B>, io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin/Long? = ..., io.github.slavikjunior.kache.core/RetryPolicy = ...) // io.github.slavikjunior.kache.core/ChainKmpCache.<init>|<init>(io.github.slavikjunior.kache.core.L1MemoryCache<1:0,1:1>;io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.Long?;io.github.slavikjunior.kache.core.RetryPolicy){}[0]
+    constructor <init>(io.github.slavikjunior.kache.core/L1MemoryCache<#A, #B>, io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/RetryPolicy = ...) // io.github.slavikjunior.kache.core/ChainKmpCache.<init>|<init>(io.github.slavikjunior.kache.core.L1MemoryCache<1:0,1:1>;io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.time.Duration?;io.github.slavikjunior.kache.core.RetryPolicy){}[0]
 
     final fun get(#A, io.github.slavikjunior.kache.core/CacheStrategy, kotlin.coroutines/SuspendFunction1<#A, #B>?): kotlinx.coroutines.flow/Flow<io.github.slavikjunior.kache.core/CacheResult<#B>> // io.github.slavikjunior.kache.core/ChainKmpCache.get|get(1:0;io.github.slavikjunior.kache.core.CacheStrategy;kotlin.coroutines.SuspendFunction1<1:0,1:1>?){}[0]
     final suspend fun clear() // io.github.slavikjunior.kache.core/ChainKmpCache.clear|clear(){}[0]
     final suspend fun invalidate(#A) // io.github.slavikjunior.kache.core/ChainKmpCache.invalidate|invalidate(1:0){}[0]
-    final suspend fun put(#A, #B, kotlin/Long?) // io.github.slavikjunior.kache.core/ChainKmpCache.put|put(1:0;1:1;kotlin.Long?){}[0]
+    final suspend fun put(#A, #B, kotlin.time/Duration?) // io.github.slavikjunior.kache.core/ChainKmpCache.put|put(1:0;1:1;kotlin.time.Duration?){}[0]
 }
 
 final class <#A: kotlin/Any?, #B: kotlin/Any?> io.github.slavikjunior.kache.core/KacheStateHolder { // io.github.slavikjunior.kache.core/KacheStateHolder|null[0]
@@ -175,12 +175,12 @@ final class <#A: kotlin/Any?, #B: kotlin/Any?> io.github.slavikjunior.kache.core
 }
 
 final class <#A: kotlin/Any?, #B: kotlin/Any?> io.github.slavikjunior.kache.core/L1MemoryCache { // io.github.slavikjunior.kache.core/L1MemoryCache|null[0]
-    constructor <init>(kotlin/Int, kotlin/Long? = ..., io.github.slavikjunior.kache.core/TimeSource = ...) // io.github.slavikjunior.kache.core/L1MemoryCache.<init>|<init>(kotlin.Int;kotlin.Long?;io.github.slavikjunior.kache.core.TimeSource){}[0]
+    constructor <init>(kotlin/Int, kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/TimeSource = ...) // io.github.slavikjunior.kache.core/L1MemoryCache.<init>|<init>(kotlin.Int;kotlin.time.Duration?;io.github.slavikjunior.kache.core.TimeSource){}[0]
 
     final suspend fun clear() // io.github.slavikjunior.kache.core/L1MemoryCache.clear|clear(){}[0]
     final suspend fun get(#A): io.github.slavikjunior.kache.core/StorageRecord<#B>? // io.github.slavikjunior.kache.core/L1MemoryCache.get|get(1:0){}[0]
     final suspend fun getStale(#A): io.github.slavikjunior.kache.core/StorageRecord<#B>? // io.github.slavikjunior.kache.core/L1MemoryCache.getStale|getStale(1:0){}[0]
-    final suspend fun put(#A, #B, kotlin/Long? = ...) // io.github.slavikjunior.kache.core/L1MemoryCache.put|put(1:0;1:1;kotlin.Long?){}[0]
+    final suspend fun put(#A, #B, kotlin.time/Duration? = ...) // io.github.slavikjunior.kache.core/L1MemoryCache.put|put(1:0;1:1;kotlin.time.Duration?){}[0]
     final suspend fun remove(#A) // io.github.slavikjunior.kache.core/L1MemoryCache.remove|remove(1:0){}[0]
     final suspend fun removeExpired(): kotlin/Int // io.github.slavikjunior.kache.core/L1MemoryCache.removeExpired|removeExpired(){}[0]
     final suspend fun size(): kotlin/Int // io.github.slavikjunior.kache.core/L1MemoryCache.size|size(){}[0]
@@ -211,22 +211,22 @@ final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/CachedState 
 }
 
 final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/StorageRecord { // io.github.slavikjunior.kache.core/StorageRecord|null[0]
-    constructor <init>(#A, kotlin/ByteArray = ..., kotlin/Long, kotlin/Long? = ...) // io.github.slavikjunior.kache.core/StorageRecord.<init>|<init>(1:0;kotlin.ByteArray;kotlin.Long;kotlin.Long?){}[0]
+    constructor <init>(#A, kotlin/ByteArray = ..., kotlin/Long, kotlin.time/Duration? = ...) // io.github.slavikjunior.kache.core/StorageRecord.<init>|<init>(1:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?){}[0]
 
     final val createdAt // io.github.slavikjunior.kache.core/StorageRecord.createdAt|{}createdAt[0]
         final fun <get-createdAt>(): kotlin/Long // io.github.slavikjunior.kache.core/StorageRecord.createdAt.<get-createdAt>|<get-createdAt>(){}[0]
     final val data // io.github.slavikjunior.kache.core/StorageRecord.data|{}data[0]
         final fun <get-data>(): kotlin/ByteArray // io.github.slavikjunior.kache.core/StorageRecord.data.<get-data>|<get-data>(){}[0]
-    final val ttlMillis // io.github.slavikjunior.kache.core/StorageRecord.ttlMillis|{}ttlMillis[0]
-        final fun <get-ttlMillis>(): kotlin/Long? // io.github.slavikjunior.kache.core/StorageRecord.ttlMillis.<get-ttlMillis>|<get-ttlMillis>(){}[0]
+    final val ttl // io.github.slavikjunior.kache.core/StorageRecord.ttl|{}ttl[0]
+        final fun <get-ttl>(): kotlin.time/Duration? // io.github.slavikjunior.kache.core/StorageRecord.ttl.<get-ttl>|<get-ttl>(){}[0]
     final val value // io.github.slavikjunior.kache.core/StorageRecord.value|{}value[0]
         final fun <get-value>(): #A // io.github.slavikjunior.kache.core/StorageRecord.value.<get-value>|<get-value>(){}[0]
 
     final fun component1(): #A // io.github.slavikjunior.kache.core/StorageRecord.component1|component1(){}[0]
     final fun component2(): kotlin/ByteArray // io.github.slavikjunior.kache.core/StorageRecord.component2|component2(){}[0]
     final fun component3(): kotlin/Long // io.github.slavikjunior.kache.core/StorageRecord.component3|component3(){}[0]
-    final fun component4(): kotlin/Long? // io.github.slavikjunior.kache.core/StorageRecord.component4|component4(){}[0]
-    final fun copy(#A = ..., kotlin/ByteArray = ..., kotlin/Long = ..., kotlin/Long? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A> // io.github.slavikjunior.kache.core/StorageRecord.copy|copy(1:0;kotlin.ByteArray;kotlin.Long;kotlin.Long?){}[0]
+    final fun component4(): kotlin.time/Duration? // io.github.slavikjunior.kache.core/StorageRecord.component4|component4(){}[0]
+    final fun copy(#A = ..., kotlin/ByteArray = ..., kotlin/Long = ..., kotlin.time/Duration? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A> // io.github.slavikjunior.kache.core/StorageRecord.copy|copy(1:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.slavikjunior.kache.core/StorageRecord.equals|equals(kotlin.Any?){}[0]
     final fun expiresAt(): kotlin/Long? // io.github.slavikjunior.kache.core/StorageRecord.expiresAt|expiresAt(){}[0]
     final fun hashCode(): kotlin/Int // io.github.slavikjunior.kache.core/StorageRecord.hashCode|hashCode(){}[0]
@@ -234,15 +234,15 @@ final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/StorageRecor
     final fun toString(): kotlin/String // io.github.slavikjunior.kache.core/StorageRecord.toString|toString(){}[0]
 
     final object Companion { // io.github.slavikjunior.kache.core/StorageRecord.Companion|null[0]
-        final fun <#A2: kotlin/Any?> create(#A2, io.github.slavikjunior.kache.core/KacheSerializer<#A2>, kotlin/Long, kotlin/Long? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.create|create(0:0;io.github.slavikjunior.kache.core.KacheSerializer<0:0>;kotlin.Long;kotlin.Long?){0§<kotlin.Any?>}[0]
-        final fun <#A2: kotlin/Any?> fromData(#A2, kotlin/ByteArray, kotlin/Long, kotlin/Long? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.fromData|fromData(0:0;kotlin.ByteArray;kotlin.Long;kotlin.Long?){0§<kotlin.Any?>}[0]
+        final fun <#A2: kotlin/Any?> create(#A2, io.github.slavikjunior.kache.core/KacheSerializer<#A2>, kotlin/Long, kotlin.time/Duration? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.create|create(0:0;io.github.slavikjunior.kache.core.KacheSerializer<0:0>;kotlin.Long;kotlin.time.Duration?){0§<kotlin.Any?>}[0]
+        final fun <#A2: kotlin/Any?> fromData(#A2, kotlin/ByteArray, kotlin/Long, kotlin.time/Duration? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.fromData|fromData(0:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?){0§<kotlin.Any?>}[0]
     }
 }
 
 final class io.github.slavikjunior.kache.core/MutableTimeSource : io.github.slavikjunior.kache.core/TimeSource { // io.github.slavikjunior.kache.core/MutableTimeSource|null[0]
     constructor <init>(kotlin/Long = ...) // io.github.slavikjunior.kache.core/MutableTimeSource.<init>|<init>(kotlin.Long){}[0]
 
-    final fun advance(kotlin/Long) // io.github.slavikjunior.kache.core/MutableTimeSource.advance|advance(kotlin.Long){}[0]
+    final fun advance(kotlin.time/Duration) // io.github.slavikjunior.kache.core/MutableTimeSource.advance|advance(kotlin.time.Duration){}[0]
     final fun currentTimeMillis(): kotlin/Long // io.github.slavikjunior.kache.core/MutableTimeSource.currentTimeMillis|currentTimeMillis(){}[0]
     final fun setTo(kotlin/Long) // io.github.slavikjunior.kache.core/MutableTimeSource.setTo|setTo(kotlin.Long){}[0]
 }

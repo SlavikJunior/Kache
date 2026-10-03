@@ -3,6 +3,7 @@ package io.github.slavikjunior.kache.core
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlin.time.Duration
 import kotlinx.coroutines.flow.flow
 
 /**
@@ -43,9 +44,9 @@ internal interface CacheTier<K, V> {
      *
      * @param key The key to write.
      * @param value The value to store.
-     * @param ttlMs Time-to-live in milliseconds, or null to never expire.
+     * @param ttl How long the entry stays fresh, or null to never expire.
      */
-    suspend fun write(key: K, value: V, ttlMs: Long?)
+    suspend fun write(key: K, value: V, ttl: Duration?)
 
     /**
      * Removes the record stored under [key].
@@ -80,13 +81,13 @@ internal class TieredValue<V>(
  * @param K Key type.
  * @param V Value type.
  * @param tier Storage tiers backing this pipeline.
- * @param defaultTtlMs TTL applied on write when the caller gives none. Null means
+ * @param defaultTtl How long entries stay fresh when a write carries no TTL. Null means
  *   entries never expire.
  * @param retryPolicy How a failing fetcher is retried.
  */
 internal class CachePipeline<K, V>(
     private val tier: CacheTier<K, V>,
-    private val defaultTtlMs: Long?,
+    private val defaultTtl: Duration?,
     private val retryPolicy: RetryPolicy,
 ) {
 
@@ -212,7 +213,7 @@ internal class CachePipeline<K, V>(
     private suspend fun read(key: K, allowStale: Boolean): TieredValue<V>? = tier.read(key, allowStale)
 
     private suspend fun write(key: K, value: V) {
-        tier.write(key, value, defaultTtlMs)
+        tier.write(key, value, defaultTtl)
     }
 
     /**

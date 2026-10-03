@@ -1,5 +1,8 @@
 package io.github.slavikjunior.kache.core
 
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+
 /**
  * The two-tier combination of an in-memory cache in front of a persistent [StorageEngine].
  *
@@ -66,11 +69,11 @@ internal class ChainTier<K, V>(
      * L2 receives the serialized payload, L1 keeps the live value so that subsequent
      * reads skip serialization entirely.
      */
-    override suspend fun write(key: K, value: V, ttlMs: Long?) {
+    override suspend fun write(key: K, value: V, ttl: Duration?) {
         val createdAt = timeSource.currentTimeMillis()
-        val record = StorageRecord.create(value, serializer, createdAt = createdAt, ttlMillis = ttlMs)
+        val record = StorageRecord.create(value, serializer, createdAt = createdAt, ttl = ttl)
         l2Storage.put(keyToString(key), record)
-        l1Cache.put(key, value, ttlMs)
+        l1Cache.put(key, value, ttl)
     }
 
     override suspend fun remove(key: K) {
@@ -92,9 +95,9 @@ internal class ChainTier<K, V>(
 
         val remainingTtl = when {
             expiresAt == null -> null
-            expiresAt <= now -> 0L
-            else -> expiresAt - now
+            expiresAt <= now -> Duration.ZERO
+            else -> (expiresAt - now).milliseconds
         }
-        l1Cache.put(key, value, ttlMs = remainingTtl)
+        l1Cache.put(key, value, ttl = remainingTtl)
     }
 }
