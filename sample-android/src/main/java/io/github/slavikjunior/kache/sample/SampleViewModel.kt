@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import kotlin.time.Duration.Companion.hours
 
 /** Value written to the cache by the sample. */
 @Serializable
@@ -240,7 +241,7 @@ private object SampleCache {
         cacheRef ?: l2Cache(
             storageEngine = engineOf(application),
             serializer = KotlinxJsonSerializer(UserProfile.serializer()),
-            defaultTtlMs = ONE_HOUR_MS,
+            defaultTtl = ENTRY_TTL,
             // A cache must not amplify traffic during an outage, so retries stay off by
             // default. This sample asks for three attempts with exponential backoff and
             // jitter, which spreads the retry load instead of retrying in lockstep.
@@ -255,5 +256,5 @@ private object SampleCache {
             ),
         ).also { cacheRef = it }
 
-    private const val ONE_HOUR_MS = 60L * 60L * 1000L
+    private val ENTRY_TTL = 1.hours
 }

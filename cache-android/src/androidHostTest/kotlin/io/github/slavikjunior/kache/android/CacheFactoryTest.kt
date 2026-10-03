@@ -18,6 +18,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The Android-only factory, exercised against the real Android runtime under Robolectric.
@@ -91,7 +93,7 @@ class CacheFactoryTest {
 
     @Test
     fun theDefaultTtlIsOneHour() {
-        assertEquals(60L * 60L * 1000L, DEFAULT_TTL_MS)
+        assertEquals(1.hours, DEFAULT_TTL)
     }
 
     @Test
@@ -102,12 +104,12 @@ class CacheFactoryTest {
     @Test
     fun anExplicitTtlOverridesTheDefault() = runTest {
         val engine = RecordingStorageEngine()
-        val cache = l2Cache(storageEngine = engine, serializer = TextSerializer, defaultTtlMs = 10_000L)
+        val cache = l2Cache(storageEngine = engine, serializer = TextSerializer, defaultTtl = 10.seconds)
 
         cache.put("k", "v")
 
         val record = assertNotNull(engine.get("k"))
-        assertNotNull(record.ttlMillis)
+        assertNotNull(record.ttl)
     }
 
     @Test

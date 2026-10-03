@@ -16,6 +16,7 @@ import org.robolectric.RuntimeEnvironment
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 /**
  * Memory-pressure handling, where the decision that matters is which trim levels are
@@ -46,8 +47,8 @@ class CacheMemoryPressureTest {
             fetcher: (suspend (String) -> String)?,
         ) = delegate.get(key, strategy, fetcher)
 
-        override suspend fun put(key: String, value: String, ttlMs: Long?) =
-            delegate.put(key, value, ttlMs)
+        override suspend fun put(key: String, value: String, ttl: Duration?) =
+            delegate.put(key, value, ttl)
 
         override suspend fun invalidate(key: String) = delegate.invalidate(key)
 
