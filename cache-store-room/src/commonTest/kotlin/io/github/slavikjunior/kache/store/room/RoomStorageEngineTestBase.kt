@@ -1,5 +1,6 @@
 package io.github.slavikjunior.kache.store.room
 
+import io.github.slavikjunior.kache.core.EvictionStrategy
 import io.github.slavikjunior.kache.core.KacheSerializer
 import io.github.slavikjunior.kache.core.StorageRecord
 import kotlinx.coroutines.test.runTest
@@ -146,6 +147,92 @@ abstract class RoomStorageEngineTestBase {
         val read = engine.get("bin")
 
         assertContentEqualsBytes(payload, assertNotNull(read).data)
+    }
+
+    @Test
+    fun touchPersistsTheAccessTimestamp() = runTest {
+        val engine = createEngine()
+        engine.put("k", StorageRecord.create("v", TextSerializer, createdAt = 100L))
+
+        assertTrue(engine.touch("k", accessedAt = 500L), "touch must report that it persisted the timestamp")
+
+        assertEquals(500L, assertNotNull(engine.get("k")).lastAccessedAt)
+    }
+
+    @Test
+    fun touchOnAMissingKeyReportsFalse() = runTest {
+        assertFalse(createEngine().touch("absent", accessedAt = 500L))
+    }
+
+    @Test
+    fun touchLeavesThePayloadAndTtlAlone() = runTest {
+        val engine = createEngine()
+        engine.put("k", StorageRecord.create("v", TextSerializer, createdAt = 100L, ttl = 10.seconds))
+
+        engine.touch("k", accessedAt = 500L)
+        val read = assertNotNull(engine.get("k"))
+
+        assertEquals("v", read.data.decodeToString())
+        assertEquals(100L, read.createdAt)
+        assertEquals(10.seconds, read.ttl)
+    }
+
+    @Test
+    fun evictionCandidatesRankByTheOldestAccessFirst() = runTest {
+        val engine = createEngine()
+        engine.put("touched-late", StorageRecord.create("a", TextSerializer, createdAt = 100L).copy(lastAccessedAt = 100L))
+        engine.put("touched-early", StorageRecord.create("b", TextSerializer, createdAt = 200L).copy(lastAccessedAt = 50L))
+        engine.put("never-touched", StorageRecord.create("c", TextSerializer, createdAt = 300L).copy(lastAccessedAt = 300L))
+
+        val candidates = engine.evictionCandidates(EvictionStrategy.LRU, limit = 10, now = 0L)
+
+        assertEquals(listOf("touched-early", "touched-late", "never-touched"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesRankByTheOldestWriteFirstUnderFifo() = runTest {
+        val engine = createEngine()
+        engine.put("written-first", StorageRecord.create("a", TextSerializer, createdAt = 100L).copy(lastAccessedAt = 900L))
+        engine.put("written-last", StorageRecord.create("b", TextSerializer, createdAt = 300L).copy(lastAccessedAt = 100L))
+
+        val candidates = engine.evictionCandidates(EvictionStrategy.FIFO, limit = 10, now = 0L)
+
+        assertEquals(listOf("written-first", "written-last"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesPutExpiredRecordsFirst() = runTest {
+        val engine = createEngine()
+        engine.put("fresh-but-youngest", StorageRecord.create("a", TextSerializer, createdAt = 100L))
+        engine.put("stale-but-oldest", StorageRecord.create("b", TextSerializer, createdAt = 50L, ttl = 10.milliseconds))
+
+        // Every strategy would rank "fresh-but-youngest" first; the expired record must still win.
+        val candidates = engine.evictionCandidates(EvictionStrategy.LIFO, limit = 1, now = 1_000L)
+
+        assertEquals(listOf("stale-but-oldest"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesHonourTheLimit() = runTest {
+        val engine = createEngine()
+        repeat(5) { i -> engine.put("k$i", StorageRecord.create("v", TextSerializer, createdAt = i.toLong())) }
+
+        assertEquals(2, engine.evictionCandidates(EvictionStrategy.FIFO, limit = 2, now = 0L).size)
+    }
+
+    @Test
+    fun evictionCandidatesOfAnEmptyStoreAreEmpty() = runTest {
+        assertTrue(createEngine().evictionCandidates(EvictionStrategy.LRU, limit = 10, now = 0L).isEmpty())
+    }
+
+    @Test
+    fun theAccessTimestampSurvivesAWrite() = runTest {
+        val engine = createEngine()
+        engine.put("k", StorageRecord.create("v", TextSerializer, createdAt = 100L).copy(lastAccessedAt = 400L))
+
+        val read = assertNotNull(engine.get("k"))
+
+        assertEquals(400L, read.lastAccessedAt, "the stored access timestamp must be persisted, not recomputed")
     }
 
     private fun assertContentEqualsBytes(expected: ByteArray, actual: ByteArray) {

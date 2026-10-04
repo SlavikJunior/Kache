@@ -14,7 +14,7 @@ import androidx.room.RoomDatabaseConstructor
 @ConstructedBy(KacheDatabaseConstructor::class)
 @Database(
     entities = [CacheEntryEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 public abstract class KacheDatabase : RoomDatabase() {

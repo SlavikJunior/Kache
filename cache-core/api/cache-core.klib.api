@@ -33,6 +33,19 @@ final enum class io.github.slavikjunior.kache.core/CacheStrategy : kotlin/Enum<i
     final fun values(): kotlin/Array<io.github.slavikjunior.kache.core/CacheStrategy> // io.github.slavikjunior.kache.core/CacheStrategy.values|values#static(){}[0]
 }
 
+final enum class io.github.slavikjunior.kache.core/EvictionStrategy : kotlin/Enum<io.github.slavikjunior.kache.core/EvictionStrategy> { // io.github.slavikjunior.kache.core/EvictionStrategy|null[0]
+    enum entry FIFO // io.github.slavikjunior.kache.core/EvictionStrategy.FIFO|null[0]
+    enum entry LIFO // io.github.slavikjunior.kache.core/EvictionStrategy.LIFO|null[0]
+    enum entry LRU // io.github.slavikjunior.kache.core/EvictionStrategy.LRU|null[0]
+    enum entry MRU // io.github.slavikjunior.kache.core/EvictionStrategy.MRU|null[0]
+
+    final val entries // io.github.slavikjunior.kache.core/EvictionStrategy.entries|#static{}entries[0]
+        final fun <get-entries>(): kotlin.enums/EnumEntries<io.github.slavikjunior.kache.core/EvictionStrategy> // io.github.slavikjunior.kache.core/EvictionStrategy.entries.<get-entries>|<get-entries>#static(){}[0]
+
+    final fun valueOf(kotlin/String): io.github.slavikjunior.kache.core/EvictionStrategy // io.github.slavikjunior.kache.core/EvictionStrategy.valueOf|valueOf#static(kotlin.String){}[0]
+    final fun values(): kotlin/Array<io.github.slavikjunior.kache.core/EvictionStrategy> // io.github.slavikjunior.kache.core/EvictionStrategy.values|values#static(){}[0]
+}
+
 abstract fun interface io.github.slavikjunior.kache.core/TimeSource { // io.github.slavikjunior.kache.core/TimeSource|null[0]
     abstract fun currentTimeMillis(): kotlin/Long // io.github.slavikjunior.kache.core/TimeSource.currentTimeMillis|currentTimeMillis(){}[0]
 }
@@ -55,7 +68,9 @@ abstract interface io.github.slavikjunior.kache.core/StorageEngine { // io.githu
     abstract suspend fun put(kotlin/String, io.github.slavikjunior.kache.core/StorageRecord<*>) // io.github.slavikjunior.kache.core/StorageEngine.put|put(kotlin.String;io.github.slavikjunior.kache.core.StorageRecord<*>){}[0]
     abstract suspend fun remove(kotlin/String): kotlin/Boolean // io.github.slavikjunior.kache.core/StorageEngine.remove|remove(kotlin.String){}[0]
     abstract suspend fun size(): kotlin/Long // io.github.slavikjunior.kache.core/StorageEngine.size|size(){}[0]
+    open suspend fun evictionCandidates(io.github.slavikjunior.kache.core/EvictionStrategy, kotlin/Int, kotlin/Long): kotlin.collections/List<kotlin/String> // io.github.slavikjunior.kache.core/StorageEngine.evictionCandidates|evictionCandidates(io.github.slavikjunior.kache.core.EvictionStrategy;kotlin.Int;kotlin.Long){}[0]
     open suspend fun removeExpired(kotlin/Long): kotlin/Long // io.github.slavikjunior.kache.core/StorageEngine.removeExpired|removeExpired(kotlin.Long){}[0]
+    open suspend fun touch(kotlin/String, kotlin/Long): kotlin/Boolean // io.github.slavikjunior.kache.core/StorageEngine.touch|touch(kotlin.String;kotlin.Long){}[0]
 }
 
 sealed interface <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/CacheResult { // io.github.slavikjunior.kache.core/CacheResult|null[0]
@@ -211,12 +226,14 @@ final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/CachedState 
 }
 
 final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/StorageRecord { // io.github.slavikjunior.kache.core/StorageRecord|null[0]
-    constructor <init>(#A, kotlin/ByteArray = ..., kotlin/Long, kotlin.time/Duration? = ...) // io.github.slavikjunior.kache.core/StorageRecord.<init>|<init>(1:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?){}[0]
+    constructor <init>(#A, kotlin/ByteArray = ..., kotlin/Long, kotlin.time/Duration? = ..., kotlin/Long = ...) // io.github.slavikjunior.kache.core/StorageRecord.<init>|<init>(1:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?;kotlin.Long){}[0]
 
     final val createdAt // io.github.slavikjunior.kache.core/StorageRecord.createdAt|{}createdAt[0]
         final fun <get-createdAt>(): kotlin/Long // io.github.slavikjunior.kache.core/StorageRecord.createdAt.<get-createdAt>|<get-createdAt>(){}[0]
     final val data // io.github.slavikjunior.kache.core/StorageRecord.data|{}data[0]
         final fun <get-data>(): kotlin/ByteArray // io.github.slavikjunior.kache.core/StorageRecord.data.<get-data>|<get-data>(){}[0]
+    final val lastAccessedAt // io.github.slavikjunior.kache.core/StorageRecord.lastAccessedAt|{}lastAccessedAt[0]
+        final fun <get-lastAccessedAt>(): kotlin/Long // io.github.slavikjunior.kache.core/StorageRecord.lastAccessedAt.<get-lastAccessedAt>|<get-lastAccessedAt>(){}[0]
     final val ttl // io.github.slavikjunior.kache.core/StorageRecord.ttl|{}ttl[0]
         final fun <get-ttl>(): kotlin.time/Duration? // io.github.slavikjunior.kache.core/StorageRecord.ttl.<get-ttl>|<get-ttl>(){}[0]
     final val value // io.github.slavikjunior.kache.core/StorageRecord.value|{}value[0]
@@ -226,7 +243,8 @@ final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/StorageRecor
     final fun component2(): kotlin/ByteArray // io.github.slavikjunior.kache.core/StorageRecord.component2|component2(){}[0]
     final fun component3(): kotlin/Long // io.github.slavikjunior.kache.core/StorageRecord.component3|component3(){}[0]
     final fun component4(): kotlin.time/Duration? // io.github.slavikjunior.kache.core/StorageRecord.component4|component4(){}[0]
-    final fun copy(#A = ..., kotlin/ByteArray = ..., kotlin/Long = ..., kotlin.time/Duration? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A> // io.github.slavikjunior.kache.core/StorageRecord.copy|copy(1:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?){}[0]
+    final fun component5(): kotlin/Long // io.github.slavikjunior.kache.core/StorageRecord.component5|component5(){}[0]
+    final fun copy(#A = ..., kotlin/ByteArray = ..., kotlin/Long = ..., kotlin.time/Duration? = ..., kotlin/Long = ...): io.github.slavikjunior.kache.core/StorageRecord<#A> // io.github.slavikjunior.kache.core/StorageRecord.copy|copy(1:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?;kotlin.Long){}[0]
     final fun equals(kotlin/Any?): kotlin/Boolean // io.github.slavikjunior.kache.core/StorageRecord.equals|equals(kotlin.Any?){}[0]
     final fun expiresAt(): kotlin/Long? // io.github.slavikjunior.kache.core/StorageRecord.expiresAt|expiresAt(){}[0]
     final fun hashCode(): kotlin/Int // io.github.slavikjunior.kache.core/StorageRecord.hashCode|hashCode(){}[0]
@@ -235,7 +253,7 @@ final class <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/StorageRecor
 
     final object Companion { // io.github.slavikjunior.kache.core/StorageRecord.Companion|null[0]
         final fun <#A2: kotlin/Any?> create(#A2, io.github.slavikjunior.kache.core/KacheSerializer<#A2>, kotlin/Long, kotlin.time/Duration? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.create|create(0:0;io.github.slavikjunior.kache.core.KacheSerializer<0:0>;kotlin.Long;kotlin.time.Duration?){0§<kotlin.Any?>}[0]
-        final fun <#A2: kotlin/Any?> fromData(#A2, kotlin/ByteArray, kotlin/Long, kotlin.time/Duration? = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.fromData|fromData(0:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?){0§<kotlin.Any?>}[0]
+        final fun <#A2: kotlin/Any?> fromData(#A2, kotlin/ByteArray, kotlin/Long, kotlin.time/Duration? = ..., kotlin/Long = ...): io.github.slavikjunior.kache.core/StorageRecord<#A2> // io.github.slavikjunior.kache.core/StorageRecord.Companion.fromData|fromData(0:0;kotlin.ByteArray;kotlin.Long;kotlin.time.Duration?;kotlin.Long){0§<kotlin.Any?>}[0]
     }
 }
 
@@ -300,3 +318,5 @@ sealed class io.github.slavikjunior.kache.core/KacheException : kotlin/Exception
 final object io.github.slavikjunior.kache.core/SystemTimeSource : io.github.slavikjunior.kache.core/TimeSource { // io.github.slavikjunior.kache.core/SystemTimeSource|null[0]
     final fun currentTimeMillis(): kotlin/Long // io.github.slavikjunior.kache.core/SystemTimeSource.currentTimeMillis|currentTimeMillis(){}[0]
 }
+
+final fun (io.github.slavikjunior.kache.core/EvictionStrategy).io.github.slavikjunior.kache.core/recordComparator(): kotlin/Comparator<io.github.slavikjunior.kache.core/StorageRecord<*>> // io.github.slavikjunior.kache.core/recordComparator|recordComparator@io.github.slavikjunior.kache.core.EvictionStrategy(){}[0]

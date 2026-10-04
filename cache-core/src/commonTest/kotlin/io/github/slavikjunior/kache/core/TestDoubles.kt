@@ -88,4 +88,12 @@ internal class InMemoryStorageEngine(
     suspend fun seed(key: String, record: StorageRecord<*>) {
         mutex.withLock { records[key] = record }
     }
+
+    /**
+     * A snapshot of what is stored, for asserting on ordering without a real backend.
+     *
+     * Deliberately returns copies of the map so a test cannot mutate engine state by
+     * accident, and so that changing [lastAccessedAt] in a test cannot leak into the cache.
+     */
+    suspend fun peekRecords(): Map<String, StorageRecord<*>> = mutex.withLock { records.toMap() }
 }

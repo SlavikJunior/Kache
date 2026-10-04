@@ -91,6 +91,20 @@ public final class io/github/slavikjunior/kache/core/ChainKmpCache : io/github/s
 	public fun put-5_5nbZA (Ljava/lang/Object;Ljava/lang/Object;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
+public final class io/github/slavikjunior/kache/core/EvictionStrategy : java/lang/Enum {
+	public static final field FIFO Lio/github/slavikjunior/kache/core/EvictionStrategy;
+	public static final field LIFO Lio/github/slavikjunior/kache/core/EvictionStrategy;
+	public static final field LRU Lio/github/slavikjunior/kache/core/EvictionStrategy;
+	public static final field MRU Lio/github/slavikjunior/kache/core/EvictionStrategy;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lio/github/slavikjunior/kache/core/EvictionStrategy;
+	public static fun values ()[Lio/github/slavikjunior/kache/core/EvictionStrategy;
+}
+
+public final class io/github/slavikjunior/kache/core/EvictionStrategyKt {
+	public static final fun recordComparator (Lio/github/slavikjunior/kache/core/EvictionStrategy;)Ljava/util/Comparator;
+}
+
 public abstract class io/github/slavikjunior/kache/core/KacheException : java/lang/Exception {
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -229,31 +243,37 @@ public final class io/github/slavikjunior/kache/core/RetryPolicy$None : io/githu
 
 public abstract interface class io/github/slavikjunior/kache/core/StorageEngine {
 	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun evictionCandidates (Lio/github/slavikjunior/kache/core/EvictionStrategy;IJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun put (Ljava/lang/String;Lio/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun touch (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/slavikjunior/kache/core/StorageEngine$DefaultImpls {
+	public static fun evictionCandidates (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/EvictionStrategy;IJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public static fun removeExpired (Lio/github/slavikjunior/kache/core/StorageEngine;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun touch (Lio/github/slavikjunior/kache/core/StorageEngine;Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/slavikjunior/kache/core/StorageRecord {
 	public static final field Companion Lio/github/slavikjunior/kache/core/StorageRecord$Companion;
-	public synthetic fun <init> (Ljava/lang/Object;[BJLkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Ljava/lang/Object;[BJLkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/Object;[BJLkotlin/time/Duration;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/Object;[BJLkotlin/time/Duration;JLkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/Object;
 	public final fun component2 ()[B
 	public final fun component3 ()J
 	public final fun component4-FghU774 ()Lkotlin/time/Duration;
-	public final fun copy-Q2Q30fc (Ljava/lang/Object;[BJLkotlin/time/Duration;)Lio/github/slavikjunior/kache/core/StorageRecord;
-	public static synthetic fun copy-Q2Q30fc$default (Lio/github/slavikjunior/kache/core/StorageRecord;Ljava/lang/Object;[BJLkotlin/time/Duration;ILjava/lang/Object;)Lio/github/slavikjunior/kache/core/StorageRecord;
+	public final fun component5 ()J
+	public final fun copy-51bEbmg (Ljava/lang/Object;[BJLkotlin/time/Duration;J)Lio/github/slavikjunior/kache/core/StorageRecord;
+	public static synthetic fun copy-51bEbmg$default (Lio/github/slavikjunior/kache/core/StorageRecord;Ljava/lang/Object;[BJLkotlin/time/Duration;JILjava/lang/Object;)Lio/github/slavikjunior/kache/core/StorageRecord;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun expiresAt ()Ljava/lang/Long;
 	public final fun getCreatedAt ()J
 	public final fun getData ()[B
+	public final fun getLastAccessedAt ()J
 	public final fun getTtl-FghU774 ()Lkotlin/time/Duration;
 	public final fun getValue ()Ljava/lang/Object;
 	public fun hashCode ()I
@@ -264,8 +284,8 @@ public final class io/github/slavikjunior/kache/core/StorageRecord {
 public final class io/github/slavikjunior/kache/core/StorageRecord$Companion {
 	public final fun create-Q2Q30fc (Ljava/lang/Object;Lio/github/slavikjunior/kache/core/KacheSerializer;JLkotlin/time/Duration;)Lio/github/slavikjunior/kache/core/StorageRecord;
 	public static synthetic fun create-Q2Q30fc$default (Lio/github/slavikjunior/kache/core/StorageRecord$Companion;Ljava/lang/Object;Lio/github/slavikjunior/kache/core/KacheSerializer;JLkotlin/time/Duration;ILjava/lang/Object;)Lio/github/slavikjunior/kache/core/StorageRecord;
-	public final fun fromData-Q2Q30fc (Ljava/lang/Object;[BJLkotlin/time/Duration;)Lio/github/slavikjunior/kache/core/StorageRecord;
-	public static synthetic fun fromData-Q2Q30fc$default (Lio/github/slavikjunior/kache/core/StorageRecord$Companion;Ljava/lang/Object;[BJLkotlin/time/Duration;ILjava/lang/Object;)Lio/github/slavikjunior/kache/core/StorageRecord;
+	public final fun fromData-51bEbmg (Ljava/lang/Object;[BJLkotlin/time/Duration;J)Lio/github/slavikjunior/kache/core/StorageRecord;
+	public static synthetic fun fromData-51bEbmg$default (Lio/github/slavikjunior/kache/core/StorageRecord$Companion;Ljava/lang/Object;[BJLkotlin/time/Duration;JILjava/lang/Object;)Lio/github/slavikjunior/kache/core/StorageRecord;
 }
 
 public final class io/github/slavikjunior/kache/core/SystemTimeSource : io/github/slavikjunior/kache/core/TimeSource {

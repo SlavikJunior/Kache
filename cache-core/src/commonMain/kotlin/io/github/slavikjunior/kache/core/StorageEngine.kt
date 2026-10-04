@@ -73,4 +73,44 @@ public interface StorageEngine {
      * @throws KacheException.DiskWriteException if the storage cannot be written.
      */
     public suspend fun removeExpired(now: Long): Long = 0L
+
+    /**
+     * Records the fact that [key] was read at [accessedAt], so that
+     * [EvictionStrategy.LRU] and [EvictionStrategy.MRU] can order it correctly.
+     *
+     * Callers must not invoke this on every read: writing on each read would turn
+     * cache hits into storage writes. The contract is that the caller only touches a key
+     * whose stored access timestamp is already older than a granularity window, which
+     * bounds the writes to at most one per key per window.
+     *
+     * Default implementation does nothing and returns false, so backends that cannot
+     * track access cheaply keep working — they simply fall back to the created-at-based
+     * strategies, since a record's access timestamp then always equals its creation one.
+     *
+     * @param key The key that was read.
+     * @param accessedAt Current epoch milliseconds.
+     * @return true if the timestamp was persisted, false if the backend does not support this.
+     * @throws KacheException.DiskWriteException if the storage cannot be written.
+     */
+    public suspend fun touch(key: String, accessedAt: Long): Boolean = false
+
+    /**
+     * Returns up to [limit] keys that [strategy] ranks as the ones to drop next, worst
+     * candidate first.
+     *
+     * Expired records must come before anything the strategy ranks, because an expired
+     * record cannot be served and dropping it costs nothing. Implementations that cannot
+     * enumerate their records cheaply should return an empty list rather than guess.
+     *
+     * @param strategy The ordering to apply.
+     * @param limit Maximum number of keys to return. Implementations may return fewer.
+     * @param now Current epoch milliseconds, used to rank expired records first.
+     * @return Candidate keys in eviction order, or an empty list if unsupported.
+     * @throws KacheException.DiskReadException if the storage cannot be read.
+     */
+    public suspend fun evictionCandidates(
+        strategy: EvictionStrategy,
+        limit: Int,
+        now: Long,
+    ): List<String> = emptyList()
 }
