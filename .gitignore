@@ -7,6 +7,9 @@ local.properties
 *.DS_Store
 */out/
 */build/
+# `*/build/` does not cross directory separators, so the nested consumer harness build
+# directory would not be matched by it.
+verification/consumer/build/
 
 # IDE / OS мусор
 *.hprof

@@ -97,7 +97,7 @@ jobs:
         run: ./gradlew apiCheck
 
   publication:
-    name: Publish to the local Maven repository
+    name: Publish and consume the artifacts
     # Runs on macOS because KMP iOS publications cannot be produced on Linux, and the
     # goal here is to prove that *every* publication still builds and carries its
     # javadoc and sources artifacts.
@@ -117,3 +117,11 @@ jobs:
       # Dry run: everything lands in build/repo, nothing leaves the machine.
       - name: Publish
         run: ./gradlew publishAllPublicationsToLocalRepository
+
+      # Resolving the artifacts as an external dependency is a different check from building
+      # them: a wrong coordinate, a POM missing a required field or a missing sources/javadoc
+      # artifact all pass publication and fail only here. The harness lives in its own Gradle
+      # build and reaches the sources not at all, which is the whole point.
+      - name: Consume the artifacts as an external dependency
+        working-directory: verification/consumer
+        run: ./gradlew run --console=plain
