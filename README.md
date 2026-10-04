@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-468%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-470%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -63,7 +63,7 @@ comes from memory, from disk or from the network, and it tells you which one it 
   - [10. Bounding how much L2 keeps](#10-bounding-how-much-l2-keeps)
   - [11. Testing TTL without waiting](#11-testing-ttl-without-waiting)
 - [Which backend should I use?](#which-backend-should-i-use)
-- [Dependencies this library brings in](#dependencies-this-library-bring-in)
+- [Dependencies this library brings in](#dependencies-this-library-brings-in)
 - [Architecture](#architecture)
 - [Building from source](#building-from-source)
 - [Project status](#project-status)
@@ -528,8 +528,30 @@ assertNull(cache.get("k"))
 | Indexed storage, migrations, or the only option on iOS | `:cache-store-room` (Room) |
 | Memory in front of disk | `ChainKmpCache` + any `StorageEngine` |
 
-Implement `StorageEngine` to add your own. It is five suspend functions, and the library
-never assumes anything beyond them.
+### Implementing your own backend
+
+`StorageEngine` has **five required** and **three optional** members. The optional ones have
+defaults that keep a backend working, but each default silently disables a feature — so read
+this table before deciding to skip one.
+
+| Member | Required | Default if omitted | What you lose without it |
+|---|---|---|---|
+| `get(key)` | yes | — | — |
+| `put(key, record)` | yes | — | — |
+| `remove(key)` | yes | — | — |
+| `clear()` | yes | — | — |
+| `size()` | yes | — | — |
+| `removeExpired(now)` | no | returns `0` | Expired records are **never** deleted, so a cache grows without bound. Nothing calls it on a schedule for you. |
+| `touch(key, accessedAt)` | no | returns `false` | `lastAccessedAt` never changes, so `EvictionStrategy.LRU` and `MRU` silently behave like `FIFO`. |
+| `evictionCandidates(strategy, limit, now)` | no | returns an empty list | `maxSize` **silently does nothing**: the cache stays over its limit and no warning is issued. |
+
+The last row is the dangerous one. A backend with only the five required functions looks
+entirely healthy while `maxSize` does nothing at all. If you set `maxSize`, implement
+`evictionCandidates`; if you use `LRU` or `MRU`, implement `touch` as well.
+
+`evictionCandidates` must return keys that are valid inputs to `remove`, worst candidate
+first, with expired records ahead of whatever the strategy ranks — see
+[recipe 10](#10-bounding-how-much-l2-keeps) for the ordering the library relies on.
 
 ## Dependencies this library brings in
 
@@ -554,6 +576,7 @@ pull Room or WorkManager.
         │  CacheResult / CacheOrigin   │
         │  RetryPolicy                 │
         │  L1MemoryCache               │
+        │  EvictionStrategy            │
         │  StorageEngine  ← the SPI    │
         │  KacheStateHolder            │
         └───────┬──────────────┬───────┘
@@ -571,6 +594,15 @@ pull Room or WorkManager.
         │  memory-pressure callbacks   │
         └──────────────────────────────┘
 ```
+
+`StorageEngine` is the extension point. Five members are required; `removeExpired`, `touch`
+and `evictionCandidates` have defaults that keep a backend working but silently disable
+reaping, LRU ordering and `maxSize` respectively — see
+[Implementing your own backend](#implementing-your-own-backend) before omitting any of them.
+
+`StorageRecord` carries `lastAccessedAt` alongside `createdAt` and `ttl`. The access timestamp
+exists for [EvictionStrategy](#10-bounding-how-much-l2-keeps): `LRU` and `MRU` rank by it, and
+it is only refreshed when a cache has a `maxSize` to begin with.
 
 `:cache-core` owns policy and depends on nothing but coroutines. The backends depend on it,
 never on each other. `:cache-android` is a convenience layer and adds no storage.
@@ -605,12 +637,12 @@ device:
 `0.1.0`. All seven roadmap phases are implemented, plus capacity limits, eviction
 strategies and optional expired-record reaping.
 
-**Test coverage** — 468 tests, green on every host:
+**Test coverage** — 470 tests, green on every host:
 
 | Module | JVM | Android host | iOS simulator |
 |---|---:|---:|---:|
 | `:cache-core` | 113 | 113 | 113 |
-| `:cache-storage` | 47 | — | — |
+| `:cache-storage` | 49 | — | — |
 | `:cache-store-room` | 23 | 7 | 20 |
 | `:cache-android` | — | 32 | — |
 
