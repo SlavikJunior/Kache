@@ -2,6 +2,7 @@ package io.github.slavikjunior.kache.core
 
 import kotlinx.coroutines.flow.Flow
 import kotlin.test.Test
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.milliseconds
@@ -69,13 +70,47 @@ class ReadmeSnippetCheck {
         RetryPolicy.None,
     )
 
-    private suspend fun recipe10(): Any? {
+    private suspend fun recipe11(): Any? {
         val clock = MutableTimeSource(initialTimeMillis = 0L)
         val cache = L1MemoryCache<String, String>(maxSize = 10, timeSource = clock)
         cache.put("k", "v", ttl = 100.milliseconds)
         clock.advance(101.milliseconds)
         val afterExpiry: StorageRecord<String>? = cache.get("k")
         return afterExpiry
+    }
+
+    /** The bounded-L2 recipe, including the zero-granularity variant called out under it. */
+    private fun recipe10(engine: StorageEngine): Any {
+        val cache = L2KmpCache<String, String>(
+            storageEngine = engine,
+            valueSerializer = TextLikeSerializer(),
+            maxSize = 500,
+            evictionStrategy = EvictionStrategy.LRU,
+            autoReapEvery = 10.minutes,
+        )
+        val exact = L2KmpCache<String, String>(
+            storageEngine = engine,
+            valueSerializer = TextLikeSerializer(),
+            maxSize = 100,
+            touchGranularity = Duration.ZERO,
+        )
+        return listOf(cache.stopAutoReap(), exact.stopAutoReap())
+    }
+
+    /** The chain cache takes the same housekeeping parameters and reaps L1 as well. */
+    private fun recipe10Chain(l1: L1MemoryCache<String, String>, l2: StorageEngine): ChainKmpCache<String, String> =
+        ChainKmpCache(
+            l1Cache = l1,
+            l2Storage = l2,
+            serializer = TextLikeSerializer(),
+            maxSize = 100,
+            evictionStrategy = EvictionStrategy.FIFO,
+            autoReapEvery = 10.minutes,
+        )
+
+    private class TextLikeSerializer : KacheSerializer<String> {
+        override fun serialize(value: String): ByteArray = value.encodeToByteArray()
+        override fun deserialize(bytes: ByteArray): String = bytes.decodeToString()
     }
 
     @Test
