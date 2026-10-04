@@ -9,6 +9,7 @@ import io.github.slavikjunior.kache.core.StorageRecord
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -290,5 +291,34 @@ class FileStorageEngineTest {
         engine.evictionCandidates(EvictionStrategy.LRU, limit = 1, now = 0L).forEach { engine.remove(it) }
 
         assertEquals(1L, engine.size())
+    }
+
+    @Test
+    fun sizeCountsEveryRecordAtVolume() = runTest {
+        repeat(2_000) { i ->
+            engine.put("key-$i", StorageRecord.create("value-$i", StringSerializer(), createdAt = i.toLong()))
+        }
+
+        assertEquals(2_000L, engine.size())
+
+        // The count must track removals too, or a cache that evicts on a size report would
+        // never believe it had freed anything.
+        repeat(500) { i -> engine.remove("key-$i") }
+        assertEquals(1_500L, engine.size())
+    }
+
+    @Test
+    fun sizeOfAnEmptyDirectoryIsZero() = runTest {
+        assertEquals(0L, engine.size())
+    }
+
+    @Test
+    fun aPartiallyWrittenTemporaryFileIsNotCounted() = runTest {
+        // Writes go to a `.tmp` file first and are then moved into place. A crash between those
+        // two steps must not leave the count permanently one too high.
+        engine.put("k", StorageRecord.create("v", StringSerializer(), createdAt = 0L))
+        File(directory, "interrupted.tmp").writeText("garbage")
+
+        assertEquals(1L, engine.size(), "a leftover temp file is not a record")
     }
 }
