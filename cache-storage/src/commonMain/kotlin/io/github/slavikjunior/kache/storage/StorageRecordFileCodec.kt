@@ -1,5 +1,6 @@
 package io.github.slavikjunior.kache.storage
 
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 import io.github.slavikjunior.kache.core.StorageRecord
@@ -7,21 +8,20 @@ import io.github.slavikjunior.kache.core.StorageRecord
 /**
  * Binary codec for on-disk [StorageRecord] payloads.
  *
- * Layout: `v2|createdAt|ttlMillis|lastAccessedAt|dataLength|data`
+ * Current layout: `v2|createdAt|ttlMillis|lastAccessedAt|dataLength|data`
  * where `ttlMillis` is written as `0` to mean "no expiry" and `lastAccessedAt` is the
  * access timestamp LRU ordering depends on.
+ *
+ * Layouts written before access tracking existed are still read:
+ * `createdAt|ttlMillis|dataLength|data`. They are told apart by the leading [FORMAT_VERSION]
+ * marker rather than by counting separators, which cannot work — the payload is arbitrary
+ * binary and may itself contain the separator byte. A legacy record is read with its
+ * `lastAccessedAt` set to its `createdAt`, the same backfill the database migration performs,
+ * so records written by either layout rank identically until they are read again.
  *
  * This lives in `commonMain` because it is pure Kotlin over [ByteArray] and [String],
  * so every platform can share one file format instead of each backend re-deriving it.
  * Only the file access itself is platform specific.
- *
- * The leading version marker is deliberate rather than clever. The payload is opaque
- * binary that may itself contain the `|` byte, so there is no way to tell the old
- * four-field header from the new five-field one by counting separators. Guessing would
- * risk decoding a record with a wrong access timestamp. Instead [decode] rejects any
- * version it does not know, and [io.github.slavikjunior.kache.core.StorageEngine.get]
- * treats that as "record absent" and deletes the file — a cache directory is disposable,
- * so a format bump costs one cold start and no data anyone can lose.
  *
  * Records are returned with their payload as the record value, since a persisted record
  * has no live object attached to it. The caller's serializer is what turns the bytes back
@@ -32,7 +32,7 @@ internal object StorageRecordFileCodec {
     private const val SEPARATOR = '|'
     private const val NO_TTL = 0L
 
-    /** Bump together with the layout above whenever the header changes shape. */
+    /** Bump together with the layout below whenever the header changes shape. */
     private const val FORMAT_VERSION = "v2"
 
     /**
@@ -62,57 +62,80 @@ internal object StorageRecordFileCodec {
     }
 
     /**
-     * Decodes bytes produced by [encode].
+     * Decodes bytes produced by [encode], or by an earlier layout this codec still reads.
      *
      * @param bytes The encoded bytes.
      * @return The decoded record, with its payload exposed as the record value.
-     * @throws IllegalArgumentException if the bytes do not match the expected format,
-     *   including when they were written by an older, incompatible layout.
+     * @throws IllegalArgumentException if the bytes match neither layout.
      */
     fun decode(bytes: ByteArray): StorageRecord<ByteArray> {
-        var pos = 0
+        val firstSeparator = indexOfSeparator(bytes, 0)
+        val firstField = bytes.decodeToString(0, firstSeparator)
 
-        val versionSep = indexOfSeparator(bytes, pos)
-        val version = bytes.decodeToString(pos, versionSep)
-        if (version != FORMAT_VERSION) {
-            throw IllegalArgumentException(
-                "Unsupported record format version '$version', expected '$FORMAT_VERSION'"
+        return if (firstField == FORMAT_VERSION) decodeCurrent(bytes, firstSeparator + 1) else {
+            // Legacy layout: `createdAt|ttlMillis|dataLength|data`, with the access time
+            // backfilled from the creation time.
+            val createdAt = firstField.toLong()
+            var pos = firstSeparator + 1
+
+            val ttlMillis = readField(bytes, pos).also { pos = it.second }
+            val dataLength = readField(bytes, pos)
+            val data = readPayload(bytes, dataLength.second, dataLength.first.toInt())
+
+            StorageRecord(
+                value = data,
+                data = data,
+                createdAt = createdAt,
+                ttl = ttlMillis.first.asTtl(),
+                lastAccessedAt = createdAt,
             )
         }
-        pos = versionSep + 1
+    }
 
-        val createdAtSep = indexOfSeparator(bytes, pos)
-        val createdAt = bytes.decodeToString(pos, createdAtSep).toLong()
-        pos = createdAtSep + 1
+    /** Reads `createdAt|ttlMillis|lastAccessedAt|dataLength|data`. */
+    private fun decodeCurrent(bytes: ByteArray, start: Int): StorageRecord<ByteArray> {
+        var pos = start
 
-        val ttlSep = indexOfSeparator(bytes, pos)
-        val ttlPart = bytes.decodeToString(pos, ttlSep)
-        val ttl = ttlPart.toLong().takeIf { it != NO_TTL }?.milliseconds
-        pos = ttlSep + 1
+        val (createdAt, afterCreatedAt) = readField(bytes, pos)
+        pos = afterCreatedAt
 
-        val accessSep = indexOfSeparator(bytes, pos)
-        val lastAccessedAt = bytes.decodeToString(pos, accessSep).toLong()
-        pos = accessSep + 1
+        val (ttlMillis, afterTtl) = readField(bytes, pos)
+        pos = afterTtl
 
-        val lengthSep = indexOfSeparator(bytes, pos)
-        val dataLength = bytes.decodeToString(pos, lengthSep).toInt()
-        pos = lengthSep + 1
+        val (lastAccessedAt, afterAccess) = readField(bytes, pos)
+        pos = afterAccess
 
-        if (dataLength < 0 || pos + dataLength > bytes.size) {
-            throw IllegalArgumentException(
-                "Invalid record format: declared data length $dataLength does not fit in ${bytes.size - pos} bytes"
-            )
-        }
+        val (declaredLength, afterLength) = readField(bytes, pos)
+        val data = readPayload(bytes, afterLength, declaredLength.toInt())
 
-        val data = bytes.copyOfRange(pos, pos + dataLength)
         return StorageRecord(
             value = data,
             data = data,
             createdAt = createdAt,
-            ttl = ttl,
+            ttl = ttlMillis.asTtl(),
             lastAccessedAt = lastAccessedAt,
         )
     }
+
+    /**
+     * Reads one numeric field, returning its value and the offset just past its separator.
+     */
+    private fun readField(bytes: ByteArray, start: Int): Pair<Long, Int> {
+        val separator = indexOfSeparator(bytes, start)
+        return bytes.decodeToString(start, separator).toLong() to separator + 1
+    }
+
+    private fun readPayload(bytes: ByteArray, start: Int, declaredLength: Int): ByteArray {
+        if (declaredLength < 0 || start + declaredLength > bytes.size) {
+            throw IllegalArgumentException(
+                "Invalid record format: declared data length $declaredLength does not fit in ${bytes.size - start} bytes"
+            )
+        }
+        return bytes.copyOfRange(start, start + declaredLength)
+    }
+
+    /** `0` in the ttl slot means "no expiry"; anything else is a whole number of milliseconds. */
+    private fun Long.asTtl(): Duration? = takeIf { it != NO_TTL }?.milliseconds
 
     private fun indexOfSeparator(bytes: ByteArray, start: Int): Int {
         for (i in start until bytes.size) {
