@@ -633,11 +633,13 @@ subclasses supplying only a factory.
   write time until they are read again. Backfilling rather than leaving the column default keeps
   an upgraded cache from treating every pre-existing row as the least recently used one and
   throwing the lot away on the first eviction.
-- **An existing file cache does not survive the format change.** The on-disk record header gained
-  a field, and the new decoder refuses a header it does not recognise rather than guessing. Old
-  files are therefore discarded on read and the cache starts cold. A cache directory is
-  disposable, so this costs one cold start and no data that could be lost, but it is a visible
-  change if a test asserted on bytes already on disk.
+- **An existing file cache survives the header change.** The on-disk record gained a field, so
+  the decoder now reads two layouts. It tells them apart by a leading version marker rather than
+  by counting separators, which cannot work: the payload is arbitrary binary that may itself
+  contain the separator byte. A legacy record is read with its access time set to its creation
+  time — the same backfill the database migration performs — so records written by either layout
+  rank identically until they are read again. A file from a *future* layout, or from a different
+  format entirely, is discarded rather than guessed at, since a cache directory is disposable.
 - Not yet published to Maven Central. See `docs/` locally or the release notes for the
   remaining manual steps (namespace verification and the Portal User Token).
 

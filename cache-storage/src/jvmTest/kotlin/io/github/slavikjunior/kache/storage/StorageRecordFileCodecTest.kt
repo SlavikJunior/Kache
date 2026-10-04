@@ -6,6 +6,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -88,13 +89,42 @@ class StorageRecordFileCodecTest {
     }
 
     @Test
-    fun aFileFromAnOlderLayoutIsRejectedRatherThanMisread() {
-        // The four-field header that shipped before access tracking. There is no way to tell it
-        // apart from the current one by scanning, because the payload is arbitrary bytes that
-        // may contain the separator — so it must be refused, and the engine discards the file.
+    fun aFileFromAnOlderLayoutIsStillReadable() {
+        // The four-field header that shipped before access tracking. It is told apart by the
+        // leading version marker, not by counting separators: the payload is arbitrary bytes and
+        // may contain one, so counting would be a guess.
         val legacy = "100|500|5|hello".encodeToByteArray()
 
-        assertFailsWith<IllegalArgumentException> { StorageRecordFileCodec.decode(legacy) }
+        val decoded = StorageRecordFileCodec.decode(legacy)
+
+        assertContentEquals("hello".encodeToByteArray(), decoded.data)
+        assertEquals(100L, decoded.createdAt)
+        assertEquals(500.milliseconds, decoded.ttl)
+        assertEquals(
+            100L,
+            decoded.lastAccessedAt,
+            "a record nobody read must rank by its write time, the same backfill the migration does",
+        )
+    }
+
+    @Test
+    fun aLegacyPayloadContainingSeparatorsIsNotMisread() {
+        val legacy = "100|0|7|a|b|c|d".encodeToByteArray()
+
+        val decoded = StorageRecordFileCodec.decode(legacy)
+
+        assertContentEquals("a|b|c|d".encodeToByteArray(), decoded.data)
+        assertEquals(100L, decoded.createdAt)
+    }
+
+    @Test
+    fun aLegacyRecordWithNoTtlDecodesAsNonExpiring() {
+        val legacy = "7|0|2|hi".encodeToByteArray()
+
+        val decoded = StorageRecordFileCodec.decode(legacy)
+
+        assertNull(decoded.ttl)
+        assertContentEquals("hi".encodeToByteArray(), decoded.data)
     }
 
     @Test
