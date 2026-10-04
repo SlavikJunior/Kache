@@ -36,9 +36,14 @@ jobs:
           # before a single line of the project is compiled.
           packages: 'platform-tools'
 
-      # compileSdk 36 for the library modules and 37 for the Compose sample.
+      # compileSdk 36 for the library modules and 37.0 for the Compose sample.
+      #
+      # Android 37 is a minor-versioned platform: the SDK manager publishes it as
+      # `platforms;android-37.0` and `platforms;android-37.1`, and there is no plain
+      # `platforms;android-37` to ask for. Naming the major version only fails here, with a
+      # "Failed to find package" that looks like an outage rather than a typo.
       - name: Install Android platforms
-        run: sdkmanager "platforms;android-36" "platforms;android-37"
+        run: sdkmanager "platform-tools" "platforms;android-36" "platforms;android-37.0" "build-tools;37.0.0"
 
       - name: Test JVM, Android host and iOS-simulator sources
         run: ./gradlew check

@@ -8,7 +8,14 @@ plugins {
 android {
     namespace = "io.github.slavikjunior.kache.sample"
     // Compose BOM 2026.09.x pulls in libraries that require compileSdk 37.
+    //
+    // Android 37 is minor-versioned and published as `platforms;android-37.0` and
+    // `platforms;android-37.1`, so a bare `compileSdk = 37` resolves to whichever minor
+    // happens to be installed. That makes a developer's machine and CI build against
+    // different platforms. Pinning the minor keeps the two identical, and CI installs
+    // exactly this one.
     compileSdk = 37
+    compileSdkMinor = 0
 
     defaultConfig {
         applicationId = "io.github.slavikjunior.kache.sample"
