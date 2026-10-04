@@ -16,18 +16,14 @@ import org.gradle.plugins.signing.SigningExtension
  * Convention plugin that configures Maven publishing for Kache modules.
  *
  * Reads metadata from `gradle.properties` and configures every [MavenPublication]
- * created in the module — the per-target publications auto-created by the Kotlin
- * Multiplatform plugin, and the explicit `maven` publication of the plain-JVM
- * `:cache-store-room` module.
+ * created in the module. All four library modules use the KMP plugin, so their publications
+ * — including the root metadata one — are auto-created and already carry per-target sources
+ * jars (`jvmSourcesJar`, `androidSourcesJar`, `ios*SourcesJar`). Nothing needs attaching
+ * here beyond the Dokka artifact.
  *
- * Adds:
- * - `dokkaJar` — a `javadoc`-classified JAR packaging the Dokka HTML output.
- *   Maven Central requires a Javadoc artifact per publication and the Dokka plugin
- *   does not create one on its own.
- * - a sources JAR for `:cache-store-room`, which the Kotlin Multiplatform plugin
- *   would otherwise provide as per-target jars. KMP modules already attach
- *   `jvmSourcesJar`/`androidSourcesJar`/`ios*SourcesJar` themselves, so their
- *   publications are left untouched.
+ * Adds `dokkaJar` — a `javadoc`-classified JAR packaging the Dokka HTML output. Maven Central
+ * requires a Javadoc artifact per publication and the Dokka plugin does not create one on its
+ * own. Sources jars are the KMP plugin's job and are left alone.
  *
  * Signing is controlled by `SIGNING_KEY` and `SIGNING_PASSWORD` (Gradle properties
  * or environment variables). When either is absent, signing is not required, which
@@ -87,10 +83,6 @@ class KachePublishConventionPlugin : Plugin<Project> {
                 }
 
                 artifact(dokkaJar)
-
-                // Per-target sources jars come from the Kotlin Multiplatform plugin;
-                // only plain-JVM modules need one attached here.
-                plainJvmSourcesJar()?.let { artifact(it) }
             }
 
             repositories {
@@ -139,19 +131,6 @@ class KachePublishConventionPlugin : Plugin<Project> {
         }
     }
 
-    /**
-     * Sources JAR of a plain-JVM module, named `kotlinSourcesJar` by the Kotlin
-     * plugin. Returns null for KMP modules, which attach per-target sources jars.
-     */
-    private fun Project.plainJvmSourcesJar(): TaskProvider<Task>? =
-        if (tasks.names.contains(KMP_SOURCES_MARKER)) {
-            null
-        } else if (tasks.names.contains(SOURCES_JAR_TASK)) {
-            tasks.named(SOURCES_JAR_TASK)
-        } else {
-            null
-        }
-
     private fun Project.configureSigning() {
         val signingKey = providers.gradleProperty(SIGNING_KEY_PROPERTY).orNull
             ?: System.getenv(SIGNING_KEY_PROPERTY)
@@ -179,12 +158,6 @@ class KachePublishConventionPlugin : Plugin<Project> {
     }
 
     private companion object {
-        /** Present only in KMP modules, where per-target sources jars are attached automatically. */
-        const val KMP_SOURCES_MARKER = "jvmSourcesJar"
-
-        /** Kotlin plugin names the sources jar `kotlinSourcesJar` on plain-JVM modules. */
-        const val SOURCES_JAR_TASK = "kotlinSourcesJar"
-
         const val DOKKA_JAR_TASK = "dokkaJar"
         const val DOKKA_OUTPUT_DIR = "dokka/html"
 
