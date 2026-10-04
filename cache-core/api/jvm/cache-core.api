@@ -83,12 +83,13 @@ public final class io/github/slavikjunior/kache/core/CachedState {
 }
 
 public final class io/github/slavikjunior/kache/core/ChainKmpCache : io/github/slavikjunior/kache/core/KmpCache {
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/Object;Lio/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
 	public fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun put-5_5nbZA (Ljava/lang/Object;Ljava/lang/Object;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stopAutoReap ()V
 }
 
 public final class io/github/slavikjunior/kache/core/EvictionStrategy : java/lang/Enum {
@@ -188,12 +189,13 @@ public final class io/github/slavikjunior/kache/core/L1MemoryCache {
 }
 
 public final class io/github/slavikjunior/kache/core/L2KmpCache : io/github/slavikjunior/kache/core/KmpCache {
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/Object;Lio/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
 	public fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun put-5_5nbZA (Ljava/lang/Object;Ljava/lang/Object;Lkotlin/time/Duration;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stopAutoReap ()V
 }
 
 public final class io/github/slavikjunior/kache/core/MutableTimeSource : io/github/slavikjunior/kache/core/TimeSource {

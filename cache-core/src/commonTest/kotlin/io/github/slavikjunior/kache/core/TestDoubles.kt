@@ -84,6 +84,33 @@ internal class InMemoryStorageEngine(
         expired.size.toLong()
     }
 
+    override suspend fun touch(key: String, accessedAt: Long): Boolean = mutex.withLock {
+        val existing = records[key] ?: return@withLock false
+        records[key] = existing.copy(lastAccessedAt = accessedAt)
+        // Counted as a write: a real backend rewrites the record or issues an UPDATE, and a
+        // test that bounds access-tracking writes has to see those writes.
+        writeCount++
+        true
+    }
+
+    override suspend fun evictionCandidates(
+        strategy: EvictionStrategy,
+        limit: Int,
+        now: Long,
+    ): List<String> = mutex.withLock {
+        if (limit <= 0) return@withLock emptyList()
+
+        val byStrategy = strategy.recordComparator()
+        records.entries
+            .sortedWith(
+                // Expired records first, matching what both real backends do.
+                compareByDescending<Map.Entry<String, StorageRecord<*>>> { it.value.isExpired(now) }
+                    .thenComparator { left, right -> byStrategy.compare(left.value, right.value) },
+            )
+            .take(limit)
+            .map { it.key }
+    }
+
     /** Direct access for arranging a state a public API call cannot reach. */
     suspend fun seed(key: String, record: StorageRecord<*>) {
         mutex.withLock { records[key] = record }

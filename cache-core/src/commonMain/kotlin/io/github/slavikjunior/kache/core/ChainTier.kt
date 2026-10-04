@@ -23,12 +23,16 @@ import kotlin.time.Duration.Companion.milliseconds
  * @param serializer Serializer used to encode values for L2 and decode them on read.
  * @param keyToString Maps a typed key to the string key used by [l2Storage]. Override
  *   when the default [Any.toString] is not a stable or safe storage key.
+ * @param maintenance Access tracking, applied after a successful L2 read. Optional: without it
+ *   L2 never learns that a record was used, and LRU ordering stays write-ordered. L1 hits are
+ *   not tracked, since L1 has its own recency order and evicts by capacity rather than by TTL.
  */
 internal class ChainTier<K, V>(
     private val l1Cache: L1MemoryCache<K, V>,
     private val l2Storage: StorageEngine,
     private val serializer: KacheSerializer<V>,
     private val keyToString: (K) -> String,
+    private val maintenance: StorageMaintenance? = null,
 ) : CacheTier<K, V> {
 
     override val timeSource: TimeSource get() = l1Cache.timeSource
@@ -58,6 +62,11 @@ internal class ChainTier<K, V>(
 
         val value = serializer.deserialize(l2Record.data)
         promoteToL1(key, value, l2Record)
+
+        // Recorded after the payload decoded, so a corrupt record does not look used. Done
+        // after promotion because L1 is the cheaper tier from here on and a promotion does not
+        // reach the backend.
+        maintenance?.touchIfNeeded(keyToString(key), l2Record)
 
         val origin = if (stale) CacheOrigin.DISK_STALE else CacheOrigin.DISK
         return TieredValue(value, origin)

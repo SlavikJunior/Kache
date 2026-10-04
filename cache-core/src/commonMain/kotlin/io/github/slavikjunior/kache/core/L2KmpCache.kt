@@ -1,5 +1,9 @@
 package io.github.slavikjunior.kache.core
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Duration
 
@@ -10,6 +14,8 @@ import kotlin.time.Duration
  * real backend without a memory tier in the way. When an in-memory tier should sit in
  * front of the backend, use [ChainKmpCache] instead, which shares the same
  * [CachePipeline] over L1 plus L2.
+ *
+ * Housekeeping — capacity, access tracking and optional reaping — is off unless configured.
  *
  * @param K Key type. Must be convertible to a stable string via [keyToString].
  * @param V Value type.
@@ -23,6 +29,14 @@ import kotlin.time.Duration
  *   [MutableTimeSource] to test expiry without waiting.
  * @param retryPolicy How a failing fetcher is retried. [RetryPolicy.None] by default, so
  *   a fetcher runs exactly once unless retries are asked for.
+ * @param maxSize Largest number of records to keep, or null for no limit. Zero and below
+ *   also mean no limit.
+ * @param evictionStrategy Which records a write drops first once [maxSize] is exceeded.
+ * @param touchGranularity How stale a record's access timestamp may get before a read
+ *   refreshes it. Bounds the writes LRU would otherwise make on every read.
+ * @param autoReapEvery How often expired records are deleted, or null to never delete them
+ *   on a schedule. Enabling it starts a coroutine that lives as long as this cache, so a
+ *   cache configured this way is expected to be long-lived.
  */
 public class L2KmpCache<K : Any, V : Any>(
     private val storageEngine: StorageEngine,
@@ -31,15 +45,46 @@ public class L2KmpCache<K : Any, V : Any>(
     private val defaultTtl: Duration? = null,
     timeSource: TimeSource = SystemTimeSource,
     private val retryPolicy: RetryPolicy = RetryPolicy.None,
+    maxSize: Long? = null,
+    evictionStrategy: EvictionStrategy = EvictionStrategy.LRU,
+    touchGranularity: Duration = StorageMaintenance.DEFAULT_TOUCH_GRANULARITY,
+    private val autoReapEvery: Duration? = null,
 ) : KmpCache<K, V> {
 
-    private val tier = StorageTier(storageEngine, valueSerializer, keyToString, timeSource)
+    private val maintenance = StorageMaintenance(
+        storageEngine = storageEngine,
+        timeSource = timeSource,
+        maxSize = maxSize,
+        evictionStrategy = evictionStrategy,
+        touchGranularity = touchGranularity,
+        autoReapEvery = autoReapEvery,
+    )
+
+    private val tier = StorageTier(storageEngine, valueSerializer, keyToString, timeSource, maintenance)
 
     private val pipeline = CachePipeline<K, V>(
         tier = tier,
         defaultTtl = defaultTtl,
         retryPolicy = retryPolicy,
     )
+
+    /**
+     * Scope for the optional reaper, created only when reaping was asked for.
+     *
+     * Null whenever `autoReapEvery` is null, which is the default: a cache nobody asked to
+     * reap must not leave a coroutine running.
+     */
+    private val maintenanceScope: CoroutineScope? = startMaintenance()
+
+    private fun startMaintenance(): CoroutineScope? {
+        if (autoReapEvery == null) return null
+
+        // SupervisorJob keeps one failed sweep from cancelling the loop; Dispatchers.Default
+        // keeps that loop off whichever dispatcher the caller's reads happen to run on.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        maintenance.startAutoReap(scope)
+        return scope
+    }
 
     override fun get(
         key: K,
@@ -48,7 +93,9 @@ public class L2KmpCache<K : Any, V : Any>(
     ): Flow<CacheResult<V>> = pipeline.execute(key, strategy, fetcher)
 
     override suspend fun put(key: K, value: V, ttl: Duration?) {
+        val stringKey = keyToString(key)
         tier.write(key, value, ttl ?: defaultTtl)
+        maintenance.enforceCapacity(protectedKey = stringKey)
     }
 
     override suspend fun invalidate(key: K) {
@@ -63,5 +110,16 @@ public class L2KmpCache<K : Any, V : Any>(
         } catch (e: Exception) {
             throw KacheException.DiskWriteException(e)
         }
+    }
+
+    /**
+     * Stops the periodic reaper, if one was started.
+     *
+     * Has no effect unless `autoReapEvery` was set. The cache stays fully usable afterwards;
+     * expired records simply stop being deleted on a schedule.
+     */
+    public fun stopAutoReap() {
+        maintenance.stopAutoReap()
+        maintenanceScope?.cancel()
     }
 }
