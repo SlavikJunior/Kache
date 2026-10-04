@@ -1,21 +1,25 @@
 public abstract interface class io/github/slavikjunior/kache/store/room/CacheEntryDao {
+	public abstract fun allMetadata (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun count (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun put (Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public abstract fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun touch (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/slavikjunior/kache/store/room/CacheEntryDao_Impl : io/github/slavikjunior/kache/store/room/CacheEntryDao {
 	public static final field Companion Lio/github/slavikjunior/kache/store/room/CacheEntryDao_Impl$Companion;
 	public fun <init> (Landroidx/room/RoomDatabase;)V
+	public fun allMetadata (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun count (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun put (Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun touch (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/slavikjunior/kache/store/room/CacheEntryDao_Impl$Companion {
@@ -23,17 +27,36 @@ public final class io/github/slavikjunior/kache/store/room/CacheEntryDao_Impl$Co
 }
 
 public final class io/github/slavikjunior/kache/store/room/CacheEntryEntity {
-	public fun <init> (Ljava/lang/String;[BJLjava/lang/Long;)V
+	public fun <init> (Ljava/lang/String;[BJLjava/lang/Long;J)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()[B
 	public final fun component3 ()J
 	public final fun component4 ()Ljava/lang/Long;
-	public final fun copy (Ljava/lang/String;[BJLjava/lang/Long;)Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;
-	public static synthetic fun copy$default (Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;Ljava/lang/String;[BJLjava/lang/Long;ILjava/lang/Object;)Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;
+	public final fun component5 ()J
+	public final fun copy (Ljava/lang/String;[BJLjava/lang/Long;J)Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;
+	public static synthetic fun copy$default (Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;Ljava/lang/String;[BJLjava/lang/Long;JILjava/lang/Object;)Lio/github/slavikjunior/kache/store/room/CacheEntryEntity;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getCacheKey ()Ljava/lang/String;
 	public final fun getCreatedAt ()J
 	public final fun getData ()[B
+	public final fun getLastAccessedAt ()J
+	public final fun getTtlMillis ()Ljava/lang/Long;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/slavikjunior/kache/store/room/CacheEntryMeta {
+	public fun <init> (Ljava/lang/String;JLjava/lang/Long;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()J
+	public final fun component3 ()Ljava/lang/Long;
+	public final fun component4 ()J
+	public final fun copy (Ljava/lang/String;JLjava/lang/Long;J)Lio/github/slavikjunior/kache/store/room/CacheEntryMeta;
+	public static synthetic fun copy$default (Lio/github/slavikjunior/kache/store/room/CacheEntryMeta;Ljava/lang/String;JLjava/lang/Long;JILjava/lang/Object;)Lio/github/slavikjunior/kache/store/room/CacheEntryMeta;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCacheKey ()Ljava/lang/String;
+	public final fun getCreatedAt ()J
+	public final fun getLastAccessedAt ()J
 	public final fun getTtlMillis ()Ljava/lang/Long;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -58,13 +81,19 @@ public final class io/github/slavikjunior/kache/store/room/KacheDatabase_Impl : 
 	public fun getRequiredAutoMigrationSpecClasses ()Ljava/util/Set;
 }
 
+public final class io/github/slavikjunior/kache/store/room/KacheMigrationsKt {
+	public static final fun getKACHE_MIGRATIONS ()[Landroidx/room/migration/Migration;
+}
+
 public final class io/github/slavikjunior/kache/store/room/RoomStorageEngine : io/github/slavikjunior/kache/core/StorageEngine {
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun evictionCandidates (Lio/github/slavikjunior/kache/core/EvictionStrategy;IJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun put (Ljava/lang/String;Lio/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun touch (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/slavikjunior/kache/store/room/RoomStorageEngineFactory {

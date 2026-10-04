@@ -39,6 +39,7 @@ public fun createFromCachesDirectory(
         name = requireNotNull(cachesDirectory.path) + "/" + databaseFileName,
     )
         .setDriver(RoomStorageEngineFactory.driver)
+        .addMigrations(*KACHE_MIGRATIONS)
         .build()
     return RoomStorageEngineFactory.create(database)
 }

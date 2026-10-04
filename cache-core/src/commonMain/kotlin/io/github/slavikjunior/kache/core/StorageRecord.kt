@@ -18,12 +18,17 @@ import kotlin.time.Duration
  * @param ttl How long the record stays fresh. Null means it never expires. Durations that
  *   are zero or negative make the record expire immediately, which is almost never what
  *   the caller meant; the tier implementations are where that is normalised.
+ * @param lastAccessedAt Timestamp in milliseconds since epoch of the last read. Defaults
+ *   to [createdAt], which makes a freshly written record the most recently used one.
+ *   L2 needs this to order records for [EvictionStrategy.LRU]; see
+ *   [StorageEngine.touch] for how it is kept current without turning every read into a write.
  */
 public data class StorageRecord<out V>(
     public val value: V,
     public val data: ByteArray = byteArrayOf(),
     public val createdAt: Long,
     public val ttl: Duration? = null,
+    public val lastAccessedAt: Long = createdAt,
 ) {
     /**
      * Checks whether this record has expired.
@@ -66,6 +71,7 @@ public data class StorageRecord<out V>(
             data = serializer.serialize(value),
             createdAt = createdAt,
             ttl = ttl,
+            lastAccessedAt = createdAt,
         )
 
         /**
@@ -75,17 +81,20 @@ public data class StorageRecord<out V>(
          * @param data The serialized payload as read from L2.
          * @param createdAt Timestamp in milliseconds since epoch when the record was written.
          * @param ttl Optional time-to-live.
+         * @param lastAccessedAt Timestamp in milliseconds since epoch of the last read.
          */
         public fun <T> fromData(
             value: T,
             data: ByteArray,
             createdAt: Long,
             ttl: Duration? = null,
+            lastAccessedAt: Long = createdAt,
         ): StorageRecord<T> = StorageRecord(
             value = value,
             data = data,
             createdAt = createdAt,
             ttl = ttl,
+            lastAccessedAt = lastAccessedAt,
         )
     }
 }

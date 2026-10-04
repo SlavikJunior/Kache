@@ -1,11 +1,13 @@
 public final class io/github/slavikjunior/kache/storage/FileStorageEngine : io/github/slavikjunior/kache/core/StorageEngine {
 	public fun <init> (Ljava/lang/String;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun evictionCandidates (Lio/github/slavikjunior/kache/core/EvictionStrategy;IJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun put (Ljava/lang/String;Lio/github/slavikjunior/kache/core/StorageRecord;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun removeExpired (JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun size (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun touch (Ljava/lang/String;JLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 }
 
 public final class io/github/slavikjunior/kache/storage/KotlinxJsonSerializer : io/github/slavikjunior/kache/core/KacheSerializer {

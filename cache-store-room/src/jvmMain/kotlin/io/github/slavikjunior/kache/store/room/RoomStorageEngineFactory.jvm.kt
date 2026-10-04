@@ -19,6 +19,7 @@ public fun createFromFile(dbFilePath: String): RoomStorageEngine {
         name = dbFile.absolutePath,
     )
         .setDriver(RoomStorageEngineFactory.driver)
+        .addMigrations(*KACHE_MIGRATIONS)
         .build()
     return RoomStorageEngineFactory.create(database)
 }

@@ -3,6 +3,7 @@ package io.github.slavikjunior.kache.storage
 import io.github.slavikjunior.kache.core.KacheException
 import io.github.slavikjunior.kache.core.KmpCache
 import io.github.slavikjunior.kache.core.CacheStrategy
+import io.github.slavikjunior.kache.core.EvictionStrategy
 import io.github.slavikjunior.kache.core.L2KmpCache
 import io.github.slavikjunior.kache.core.StorageRecord
 import kotlinx.coroutines.flow.first
@@ -224,5 +225,70 @@ class FileStorageEngineTest {
             KotlinxJsonSerializer(Profile.serializer()).serialize(profile),
             result.data.let { KotlinxJsonSerializer(Profile.serializer()).serialize(it) },
         )
+    }
+
+    @Test
+    fun touchUpdatesTheStoredAccessTimestamp() = runTest {
+        engine.put("k", StorageRecord.create("v", StringSerializer(), createdAt = 100L))
+
+        assertTrue(engine.touch("k", accessedAt = 500L), "touch must report that it persisted the timestamp")
+        assertEquals(500L, assertNotNull(engine.get("k")).lastAccessedAt)
+    }
+
+    @Test
+    fun touchOnAMissingKeyReportsFalse() = runTest {
+        assertFalse(engine.touch("absent", accessedAt = 500L))
+    }
+
+    @Test
+    fun touchKeepsThePayloadReadable() = runTest {
+        engine.put("k", StorageRecord.create("payload", StringSerializer(), createdAt = 100L))
+
+        engine.touch("k", accessedAt = 500L)
+
+        assertEquals("payload", assertNotNull(engine.get("k")).data.decodeToString())
+    }
+
+    @Test
+    fun evictionCandidatesRankByTheOldestAccessFirst() = runTest {
+        engine.put("late", StorageRecord.create("a", StringSerializer(), createdAt = 100L).copy(lastAccessedAt = 100L))
+        engine.put("early", StorageRecord.create("b", StringSerializer(), createdAt = 200L).copy(lastAccessedAt = 50L))
+
+        val candidates = engine.evictionCandidates(EvictionStrategy.LRU, limit = 10, now = 0L)
+
+        assertEquals(listOf("early", "late"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesRankByTheOldestWriteFirstUnderFifo() = runTest {
+        // Access order deliberately opposes write order: FIFO must ignore it.
+        engine.put("written-first", StorageRecord.create("a", StringSerializer(), createdAt = 100L).copy(lastAccessedAt = 900L))
+        engine.put("written-last", StorageRecord.create("b", StringSerializer(), createdAt = 300L).copy(lastAccessedAt = 100L))
+
+        val candidates = engine.evictionCandidates(EvictionStrategy.FIFO, limit = 10, now = 0L)
+
+        assertEquals(listOf("written-first", "written-last"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesPutExpiredRecordsFirst() = runTest {
+        engine.put("fresh", StorageRecord.create("a", StringSerializer(), createdAt = 100L))
+        engine.put("stale", StorageRecord.create("b", StringSerializer(), createdAt = 50L, ttl = 10.milliseconds))
+
+        // LIFO would rank "fresh" first by access time; the expired record must still win.
+        val candidates = engine.evictionCandidates(EvictionStrategy.LRU, limit = 1, now = 1_000L)
+
+        assertEquals(listOf("stale"), candidates)
+    }
+
+    @Test
+    fun evictionCandidateNamesCanBeRemoved() = runTest {
+        engine.put("a", StorageRecord.create("1", StringSerializer(), createdAt = 100L))
+        engine.put("b", StorageRecord.create("2", StringSerializer(), createdAt = 200L))
+
+        // The candidates are file names, which must stay valid inputs to remove().
+        engine.evictionCandidates(EvictionStrategy.LRU, limit = 1, now = 0L).forEach { engine.remove(it) }
+
+        assertEquals(1L, engine.size())
     }
 }

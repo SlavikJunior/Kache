@@ -13,6 +13,9 @@ import androidx.room.PrimaryKey
  * @property ttlMillis Time-to-live in milliseconds, or null if the entry never expires.
  *   Kept as a number rather than a [kotlin.time.Duration] because this is the database
  *   schema; [RoomStorageEngine] converts at the boundary.
+ * @property lastAccessedAt Epoch milliseconds of the last read, backing LRU ordering.
+ *   Added in schema version 2; the migration backfills it with [createdAt] so that existing
+ *   rows rank by write time until they are read again.
  */
 @Entity(tableName = "cache_entries")
 public data class CacheEntryEntity(
@@ -27,7 +30,10 @@ public data class CacheEntryEntity(
     val createdAt: Long,
 
     @ColumnInfo(name = "ttl_millis")
-    val ttlMillis: Long?
+    val ttlMillis: Long?,
+
+    @ColumnInfo(name = "last_accessed_at")
+    val lastAccessedAt: Long,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -39,6 +45,7 @@ public data class CacheEntryEntity(
         if (!data.contentEquals(other.data)) return false
         if (createdAt != other.createdAt) return false
         if (ttlMillis != other.ttlMillis) return false
+        if (lastAccessedAt != other.lastAccessedAt) return false
 
         return true
     }
@@ -48,6 +55,7 @@ public data class CacheEntryEntity(
         result = 31 * result + data.contentHashCode()
         result = 31 * result + createdAt.hashCode()
         result = 31 * result + (ttlMillis?.hashCode() ?: 0)
+        result = 31 * result + lastAccessedAt.hashCode()
         return result
     }
 }
