@@ -6,7 +6,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Thread-safe in-memory cache with LRU eviction and optional TTL.
+ * Thread-safe in-memory cache with expired-first eviction and optional TTL.
  *
  * All state transitions happen under a coroutines [Mutex], which is the only
  * synchronization primitive available in `commonMain` across all KMP targets.
@@ -106,7 +106,8 @@ public class L1MemoryCache<K, V>(
     /**
      * Stores [value] under [key], resetting any existing TTL.
      *
-     * Evicts the least recently used entry if this pushes the cache over [maxSize].
+     * Evicts one entry if this pushes the cache over [maxSize]: an expired one when
+     * any exists, otherwise the least recently used.
      *
      * @param key The key to write.
      * @param value The value to store.
@@ -127,7 +128,7 @@ public class L1MemoryCache<K, V>(
         accessOrder.add(key)
 
         if (entries.size > maxSize) {
-            evictLeastRecentlyUsed()
+            evictOne(now)
         }
     }
 
@@ -180,8 +181,19 @@ public class L1MemoryCache<K, V>(
         accessOrder.add(key)
     }
 
-    private fun evictLeastRecentlyUsed() {
-        accessOrder.firstOrNull()?.let { removeEntry(it) }
+    /**
+     * Drops a single entry once the cache is over capacity.
+     *
+     * An expired entry is always preferred over the least recently used one. Evicting
+     * an expired entry costs nothing, because no caller can ever read it back through
+     * [get]; evicting a fresh one does. Falls back to plain LRU when nothing has
+     * expired yet.
+     *
+     * @param now Current epoch millis, taken once by the caller.
+     */
+    private fun evictOne(now: Long) {
+        val expiredKey = entries.entries.firstOrNull { it.value.isExpired(now) }?.key
+        removeEntry(expiredKey ?: accessOrder.first())
     }
 
     /**
