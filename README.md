@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-324%20green-1D6B4F.svg)](#test-coverage)
+[![Tests](https://img.shields.io/badge/tests-468%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -60,7 +60,8 @@ comes from memory, from disk or from the network, and it tells you which one it 
   - [7. Clearing a cache with a screen](#7-clearing-a-cache-with-a-screen)
   - [8. Reacting to memory pressure](#8-reacting-to-memory-pressure)
   - [9. Retry policy](#9-retry-policy)
-  - [10. Testing TTL without waiting](#10-testing-ttl-without-waiting)
+  - [10. Bounding how much L2 keeps](#10-bounding-how-much-l2-keeps)
+  - [11. Testing TTL without waiting](#11-testing-ttl-without-waiting)
 - [Which backend should I use?](#which-backend-should-i-use)
 - [Dependencies this library brings in](#dependencies-this-library-bring-in)
 - [Architecture](#architecture)
@@ -457,7 +458,49 @@ the delay into `[1 - jitterRatio, 1]`.
 > `AndroidViewModel` now live in `androidx.lifecycle:lifecycle-viewmodel`, which is what
 > `:cache-android` depends on.
 
-### 10. Testing TTL without waiting
+### 10. Bounding how much L2 keeps
+
+```kotlin
+val cache = L2KmpCache(
+    storageEngine = FileStorageEngine(cacheDir),
+    valueSerializer = KotlinxJsonSerializer(),
+    maxSize = 500,                            // null = no limit; 0 or below also means no limit
+    evictionStrategy = EvictionStrategy.LRU,
+    autoReapEvery = 10.minutes,               // null = never delete expired records on a schedule
+)
+```
+
+Three independent policies, all off by default:
+
+| Parameter | Default | What it does |
+|---|---|---|
+| `maxSize` | `null` | Keeps at most this many records, dropping the worst candidate on each write that exceeds it. Measured in records, not bytes. |
+| `evictionStrategy` | `EvictionStrategy.LRU` | Which record `maxSize` drops: `LRU`, `FIFO`, `MRU` or `LIFO`. |
+| `autoReapEvery` | `null` | Deletes expired records on an interval. Without it an expired record stays until its key is read or overwritten. |
+
+**Expired records always go first**, whatever the strategy says. An expired record cannot be
+served by any read path, so dropping it costs nothing; dropping a fresh one does.
+
+**Access tracking follows the limit, not a separate switch.** `LRU` and `MRU` rank by
+`lastAccessedAt`, which a read refreshes at most once per `touchGranularity` (one minute by
+default). That floor is what keeps a key read in a loop from costing a write per read. But
+without a `maxSize` nothing would ever be evicted, so nothing would ever read those timestamps
+back — a cache that was never asked to bound its size therefore performs **no extra writes at
+all**.
+
+```kotlin
+// Exact recency, at the cost of a write on every single read. Rarely what you want.
+L2KmpCache(engine, serializer, maxSize = 100, touchGranularity = Duration.ZERO)
+```
+
+Both caches accept the same parameters, so `ChainKmpCache` bounds L2 while L1 stays bounded by
+`L1MemoryCache(maxSize = …)`. `autoReapEvery` on a `ChainKmpCache` also sweeps L1.
+
+`autoReapEvery` starts a coroutine that lives as long as the cache, so a cache configured this
+way is expected to be long-lived — an application-scoped one. Call `stopAutoReap()` when a cache
+outlives its owner, or when the sweeping should stop while the cache stays usable.
+
+### 11. Testing TTL without waiting
 
 `TimeSource` is injectable, so expiry is deterministic and no test ever sleeps.
 
@@ -559,16 +602,21 @@ device:
 
 ## Project status
 
-`0.1.0`. All seven roadmap phases are implemented.
+`0.1.0`. All seven roadmap phases are implemented, plus capacity limits, eviction
+strategies and optional expired-record reaping.
 
-**Test coverage** — 324 tests, green on every host:
+**Test coverage** — 468 tests, green on every host:
 
 | Module | JVM | Android host | iOS simulator |
 |---|---:|---:|---:|
-| `:cache-core` | 82 | 82 | 82 |
-| `:cache-storage` | 27 | — | — |
-| `:cache-store-room` | 11 | 7 | 11 |
-| `:cache-android` | — | 22 | — |
+| `:cache-core` | 113 | 113 | 113 |
+| `:cache-storage` | 47 | — | — |
+| `:cache-store-room` | 23 | 7 | 20 |
+| `:cache-android` | — | 32 | — |
+
+`:cache-core` runs one set of `commonTest` sources on all three hosts, so its count is identical
+by construction. `:cache-store-room` has a single shared contract with thin per-platform
+subclasses supplying only a factory.
 
 **Known gaps, stated plainly:**
 
@@ -579,6 +627,17 @@ device:
 - `RoomStorageEngineFactory.createFromContext` is not exercised at runtime in a host test:
   the bundled SQLite driver ships a JNI library built for Android ABIs and cannot load in a
   host JVM test. It is covered by compilation, by the published AAR and by the sample app.
+- **Schema version 2 is a breaking change for an existing Room database.** `:cache-store-room`
+  went from schema 1 to 2 to add `last_accessed_at`. A migration is provided and wired into every
+  factory, so existing rows are carried forward and backfilled from `created_at` — they rank by
+  write time until they are read again. Backfilling rather than leaving the column default keeps
+  an upgraded cache from treating every pre-existing row as the least recently used one and
+  throwing the lot away on the first eviction.
+- **An existing file cache does not survive the format change.** The on-disk record header gained
+  a field, and the new decoder refuses a header it does not recognise rather than guessing. Old
+  files are therefore discarded on read and the cache starts cold. A cache directory is
+  disposable, so this costs one cold start and no data that could be lost, but it is a visible
+  change if a test asserted on bytes already on disk.
 - Not yet published to Maven Central. See `docs/` locally or the release notes for the
   remaining manual steps (namespace verification and the Portal User Token).
 
