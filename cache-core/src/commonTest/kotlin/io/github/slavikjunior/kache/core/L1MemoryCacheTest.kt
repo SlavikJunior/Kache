@@ -54,6 +54,82 @@ class L1MemoryCacheTest {
     }
 
     @Test
+    fun anExpiredEntryIsEvictedBeforeTheLeastRecentlyUsedFreshOne() = runTest {
+        val cache = L1MemoryCache<String, String>(maxSize = 3, timeSource = time)
+        cache.put("fresh-lru", "1")
+        cache.put("also-fresh", "2")
+        cache.put("doomed", "3", ttl = 100.milliseconds)
+        // "doomed" is now the most recently used, so plain LRU would drop "fresh-lru".
+        cache.get("doomed")
+
+        time.advance(200.milliseconds)
+        cache.put("newcomer", "4")
+
+        assertNull(cache.getStale("doomed"), "the expired entry must be the one evicted")
+        assertNotNull(cache.get("fresh-lru"), "a fresh LRU head must survive while an expired entry exists")
+        assertEquals("2", cache.get("also-fresh")?.value)
+        assertEquals(3, cache.size())
+    }
+
+    @Test
+    fun evictionKeepsTheFreshEntryWhileExpiredOnesAreDropped() = runTest {
+        val cache = L1MemoryCache<String, String>(maxSize = 3, timeSource = time)
+        cache.put("keep", "1")
+        cache.put("dead-1", "2", ttl = 100.milliseconds)
+        cache.put("dead-2", "3", ttl = 100.milliseconds)
+
+        time.advance(200.milliseconds)
+        // Two writes, two evictions: both must come out of the dead pair, not out of "keep".
+        cache.put("new-1", "4")
+        cache.put("new-2", "5")
+
+        assertEquals("1", cache.get("keep")?.value, "a fresh entry must not be evicted while dead ones remain")
+        assertEquals("4", cache.get("new-1")?.value)
+        assertEquals("5", cache.get("new-2")?.value)
+        assertEquals(3, cache.size())
+    }
+
+    @Test
+    fun capacityIsRespectedWhenEveryEntryIsExpired() = runTest {
+        val cache = L1MemoryCache<String, String>(maxSize = 2, timeSource = time)
+        cache.put("a", "1", ttl = 100.milliseconds)
+        cache.put("b", "2", ttl = 100.milliseconds)
+
+        time.advance(200.milliseconds)
+        repeat(5) { i -> cache.put("k$i", "v$i", ttl = 100.milliseconds) }
+
+        assertEquals(2, cache.size(), "expired entries must not accumulate past capacity")
+    }
+
+    @Test
+    fun anExpiredEntryReadThroughGetStaleIsStillEvictedFirst() = runTest {
+        val cache = L1MemoryCache<String, String>(maxSize = 2, timeSource = time)
+        cache.put("fresh", "1")
+        cache.put("doomed", "2", ttl = 100.milliseconds)
+        // getStale keeps the entry and promotes it, so it is no longer the LRU head.
+        assertEquals("2", cache.getStale("doomed")?.value)
+
+        time.advance(200.milliseconds)
+        cache.put("newcomer", "3")
+
+        assertNotNull(cache.get("fresh"), "a stale read must not shield a fresh entry from eviction")
+        assertNull(cache.getStale("doomed"))
+        assertEquals("3", cache.get("newcomer")?.value)
+    }
+
+    @Test
+    fun evictionKeepsTheEntryJustWritten() = runTest {
+        val cache = L1MemoryCache<String, String>(maxSize = 1, timeSource = time)
+        cache.put("old", "1")
+
+        cache.put("fresh-write", "2")
+
+        assertEquals("2", cache.get("fresh-write")?.value, "the write that triggered eviction must survive it")
+        assertNull(cache.get("old"))
+        assertEquals(1, cache.size())
+    }
+
+    @Test
     fun updateRefreshesPositionWithoutGrowingTheCache() = runTest {
         val cache = L1MemoryCache<String, String>(maxSize = 2, timeSource = time)
         cache.put("a", "1")
