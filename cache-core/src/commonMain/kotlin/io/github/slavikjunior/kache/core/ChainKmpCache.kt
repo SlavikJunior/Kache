@@ -1,5 +1,9 @@
 package io.github.slavikjunior.kache.core
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Duration
 
@@ -23,6 +27,14 @@ import kotlin.time.Duration
  *   [put] alone.
  * @param retryPolicy How a failing fetcher is retried. [RetryPolicy.None] by default, so
  *   a fetcher runs exactly once unless retries are asked for.
+ * @param maxSize Largest number of L2 records to keep, or null for no limit. Zero and below
+ *   also mean no limit. L1 is bounded separately by [L1MemoryCache.maxSize].
+ * @param evictionStrategy Which L2 records a write drops first once [maxSize] is exceeded.
+ * @param touchGranularity How stale an L2 record's access timestamp may get before a read
+ *   refreshes it. Bounds the writes LRU would otherwise make on every read.
+ * @param autoReapEvery How often expired records are deleted from both tiers, or null to
+ *   never delete them on a schedule. Enabling it starts a coroutine that lives as long as
+ *   this cache, so a cache configured this way is expected to be long-lived.
  */
 public class ChainKmpCache<K, V>(
     private val l1Cache: L1MemoryCache<K, V>,
@@ -31,15 +43,48 @@ public class ChainKmpCache<K, V>(
     private val keyToString: (K) -> String = { it.toString() },
     private val defaultTtl: Duration? = null,
     private val retryPolicy: RetryPolicy = RetryPolicy.None,
+    maxSize: Long? = null,
+    evictionStrategy: EvictionStrategy = EvictionStrategy.LRU,
+    touchGranularity: Duration = StorageMaintenance.DEFAULT_TOUCH_GRANULARITY,
+    private val autoReapEvery: Duration? = null,
 ) : KmpCache<K, V> {
 
-    private val tier = ChainTier(l1Cache, l2Storage, serializer, keyToString)
+    private val maintenance = StorageMaintenance(
+        storageEngine = l2Storage,
+        timeSource = l1Cache.timeSource,
+        maxSize = maxSize,
+        evictionStrategy = evictionStrategy,
+        touchGranularity = touchGranularity,
+        autoReapEvery = autoReapEvery,
+    )
+
+    private val tier = ChainTier(l1Cache, l2Storage, serializer, keyToString, maintenance)
 
     private val pipeline = CachePipeline<K, V>(
         tier = tier,
         defaultTtl = defaultTtl,
         retryPolicy = retryPolicy,
     )
+
+    /**
+     * Scope for the optional reaper, created only when reaping was asked for.
+     *
+     * Null whenever `autoReapEvery` is null, which is the default: a cache nobody asked to
+     * reap must not leave a coroutine running.
+     */
+    private val maintenanceScope: CoroutineScope? = startMaintenance()
+
+    private fun startMaintenance(): CoroutineScope? {
+        if (autoReapEvery == null) return null
+
+        // SupervisorJob keeps one failed sweep from cancelling the loop; Dispatchers.Default
+        // keeps that loop off whichever dispatcher the caller's reads happen to run on.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // L1 is swept alongside L2: its expired entries are otherwise only dropped on read or
+        // when capacity forces an eviction.
+        maintenance.startAutoReap(scope, memoryTier = { l1Cache.removeExpired() })
+        return scope
+    }
 
     override fun get(
         key: K,
@@ -48,7 +93,9 @@ public class ChainKmpCache<K, V>(
     ): Flow<CacheResult<V>> = pipeline.execute(key, strategy, fetcher)
 
     override suspend fun put(key: K, value: V, ttl: Duration?) {
+        val stringKey = keyToString(key)
         tier.write(key, value, ttl ?: defaultTtl)
+        maintenance.enforceCapacity(protectedKey = stringKey)
     }
 
     override suspend fun invalidate(key: K) {
@@ -58,5 +105,16 @@ public class ChainKmpCache<K, V>(
     override suspend fun clear() {
         l1Cache.clear()
         l2Storage.clear()
+    }
+
+    /**
+     * Stops the periodic reaper, if one was started.
+     *
+     * Has no effect unless `autoReapEvery` was set. The cache stays fully usable afterwards;
+     * expired records simply stop being deleted on a schedule.
+     */
+    public fun stopAutoReap() {
+        maintenance.stopAutoReap()
+        maintenanceScope?.cancel()
     }
 }

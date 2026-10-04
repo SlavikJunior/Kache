@@ -13,12 +13,15 @@ import kotlin.time.Duration
  * @param keyToString Maps a typed key to the string key used by [storageEngine]. Override
  *   when the default [Any.toString] is not stable or safe as a storage key.
  * @param timeSource Clock used to decide whether a record has expired.
+ * @param maintenance Access tracking, applied after a successful read. Optional: without it
+ *   a backend never learns that a record was used, and LRU ordering stays write-ordered.
  */
 internal class StorageTier<K : Any, V : Any>(
     private val storageEngine: StorageEngine,
     private val serializer: KacheSerializer<V>,
     private val keyToString: (K) -> String,
     override val timeSource: TimeSource,
+    private val maintenance: StorageMaintenance? = null,
 ) : CacheTier<K, V> {
 
     /**
@@ -47,6 +50,10 @@ internal class StorageTier<K : Any, V : Any>(
             storageEngine.remove(stringKey)
             throw if (e is KacheException.SerializationException) e else KacheException.SerializationException(e)
         }
+
+        // Recorded after the value is known good, so a failed decode does not make a record
+        // look used.
+        maintenance?.touchIfNeeded(stringKey, record)
 
         val origin = if (stale) CacheOrigin.DISK_STALE else CacheOrigin.DISK
         return TieredValue(value, origin)
