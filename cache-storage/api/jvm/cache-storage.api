@@ -1,5 +1,6 @@
 public final class io/github/slavikjunior/kache/storage/FileStorageEngine : io/github/slavikjunior/kache/core/StorageEngine {
-	public fun <init> (Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;J)V
+	public synthetic fun <init> (Ljava/lang/String;JILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun evictionCandidates (Lio/github/slavikjunior/kache/core/EvictionStrategy;IJLkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

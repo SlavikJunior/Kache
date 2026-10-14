@@ -6,8 +6,13 @@ import io.github.slavikjunior.kache.core.CacheStrategy
 import io.github.slavikjunior.kache.core.EvictionStrategy
 import io.github.slavikjunior.kache.core.L2KmpCache
 import io.github.slavikjunior.kache.core.StorageRecord
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.nio.file.Files
@@ -17,6 +22,7 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -88,14 +94,148 @@ class FileStorageEngineTest {
     }
 
     @Test
-    fun unsafeKeyCharactersAreSanitised() = runTest {
+    fun unsafeKeyCharactersArePercentEncoded() = runTest {
         engine.put("user/42 profile", StorageRecord.create("v", StringSerializer(), createdAt = 0L))
 
-        // The sanitised name is what lands on disk; the raw key must not become a path.
+        // The encoded name is what lands on disk; the raw key must not become a path.
         val onDisk = directory.listFiles().orEmpty().single()
         assertFalse(onDisk.name.contains('/'))
-        assertEquals("user_42_profile", onDisk.name)
+        assertEquals("kuser%2F42%20profile", onDisk.name)
         assertEquals(1L, engine.size())
+    }
+
+    @Test
+    fun distinctKeysNeverShareAFile() = runTest {
+        // These three collapsed onto a single file under the old lossy sanitisation, so
+        // writing one silently replaced another and reading either returned the other's value.
+        val keys = listOf("user:1", "user/1", "user_1")
+
+        keys.forEachIndexed { index, key ->
+            engine.put(key, StorageRecord.create("value-$index", StringSerializer(), createdAt = 0L))
+        }
+
+        assertEquals(3L, engine.size(), "each key must own its own file")
+        keys.forEachIndexed { index, key ->
+            val read = assertNotNull(engine.get(key))
+            assertEquals("value-$index", StringSerializer().deserialize(read.data))
+        }
+    }
+
+    @Test
+    fun aDotDotKeyStaysInsideTheCacheDirectory() = runTest {
+        val parent = directory.parentFile
+
+        engine.put("..", StorageRecord.create("v", StringSerializer(), createdAt = 0L))
+        engine.put(".", StorageRecord.create("v", StringSerializer(), createdAt = 0L))
+        engine.put("", StorageRecord.create("v", StringSerializer(), createdAt = 0L))
+
+        // Every record is a file in the cache directory, never the directory above it.
+        assertEquals(3L, engine.size())
+        assertTrue(directory.listFiles().orEmpty().all { it.isFile })
+        assertTrue(assertNotNull(parent).isDirectory, "the parent directory must be untouched")
+        assertNotNull(engine.get(".."))
+        assertNotNull(engine.get("."))
+        assertNotNull(engine.get(""))
+    }
+
+    @Test
+    fun removingADotDotKeyDoesNotDeleteTheParentDirectory() = runTest {
+        val parent = directory.parentFile
+        engine.put("..", StorageRecord.create("v", StringSerializer(), createdAt = 0L))
+
+        assertTrue(engine.remove(".."))
+
+        assertTrue(assertNotNull(parent).isDirectory, "removing a key must never touch the parent")
+        assertEquals(0L, engine.size())
+    }
+
+    @Test
+    fun concurrentWritesToTheSameKeyNeverPublishAPartialRecord() = runBlocking {
+        // Every writer shared one temporary file before, so a writer could move another's
+        // half-written bytes into place. A torn record fails to decode, which is what this
+        // asserts against: whatever is read back must be one whole payload.
+        val payloads = List(WRITERS) { writer -> "payload-$writer-" + "x".repeat(PAYLOAD_PADDING) }
+
+        withContext(Dispatchers.Default) {
+            payloads.map { payload ->
+                async {
+                    engine.put(
+                        HOT_KEY,
+                        StorageRecord.create(payload, StringSerializer(), createdAt = 0L),
+                    )
+                }
+            }.awaitAll()
+        }
+
+        val read = assertNotNull(engine.get(HOT_KEY), "a torn write leaves nothing readable")
+        val decoded = StringSerializer().deserialize(read.data)
+        assertTrue(decoded in payloads, "decoded to something no writer wrote: ${decoded.take(32)}")
+        assertEquals(1L, engine.size(), "no temporary file may be left behind")
+    }
+
+    @Test
+    fun aRecordOverTheLimitIsRejectedOnWrite() = runTest {
+        val tiny = FileStorageEngine(directory.absolutePath, maxRecordBytes = 32)
+        val big = StorageRecord.create("x".repeat(1_000), StringSerializer(), createdAt = 0L)
+
+        assertFailsWith<KacheException.DiskWriteException> { tiny.put("k", big) }
+        assertEquals(0L, tiny.size(), "a rejected write must not leave anything behind")
+    }
+
+    @Test
+    fun aFileOverTheLimitIsNotLoadedIntoMemory() = runTest {
+        val tiny = FileStorageEngine(directory.absolutePath, maxRecordBytes = 32)
+        tiny.put("k", StorageRecord.create("small", StringSerializer(), createdAt = 0L))
+        val file = directory.listFiles().orEmpty().single()
+
+        // A *valid* record that is merely too large. Writing garbage would prove nothing:
+        // the old code also refused to decode garbage, so both versions would agree. Here the
+        // old code reads and decodes this happily, and only the size guard refuses it.
+        val oversized = StorageRecordFileCodec.encode(
+            StorageRecord.create("x".repeat(1_000), StringSerializer(), createdAt = 0L)
+        )
+        assertTrue(oversized.size > 32)
+        file.writeBytes(oversized)
+
+        assertNull(tiny.get("k"), "an oversized file is treated as corrupt, not loaded")
+        assertFalse(file.exists(), "and dropped, like any other unreadable record")
+    }
+
+    @Test
+    fun evictionCandidatesAreKeysNotFileNames() = runTest {
+        engine.put("user:1", StorageRecord.create("v", StringSerializer(), createdAt = 100L))
+
+        val candidates = engine.evictionCandidates(EvictionStrategy.LRU, limit = 10, now = 0L)
+
+        // The SPI contract says keys. An encoded file name would still remove the right file,
+        // but it would be the wrong value to hand back to a caller.
+        assertEquals(listOf("user:1"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesKeepOnlyTheWorstWhenTheLimitIsSmall() = runTest {
+        repeat(1_000) { index ->
+            engine.put("key-$index", StorageRecord.create("v", StringSerializer(), createdAt = index.toLong()))
+        }
+
+        // LRU ranks by access time, which equals creation time here, so the five oldest go.
+        // A full sort would pass this too; the bounded heap is what keeps memory at O(limit).
+        val candidates = engine.evictionCandidates(EvictionStrategy.LRU, limit = 5, now = 0L)
+
+        assertEquals(listOf("key-0", "key-1", "key-2", "key-3", "key-4"), candidates)
+    }
+
+    @Test
+    fun evictionCandidatesIgnoreFilesThisEngineDidNotWrite() = runTest {
+        engine.put("mine", StorageRecord.create("v", StringSerializer(), createdAt = 100L))
+        File(directory, "foreign").writeBytes(StorageRecordFileCodec.encode(
+            StorageRecord.create("v", StringSerializer(), createdAt = 0L)
+        ))
+
+        val candidates = engine.evictionCandidates(EvictionStrategy.LRU, limit = 10, now = 0L)
+
+        // A name that does not decode to a key cannot be handed to remove(), so it is skipped.
+        assertEquals(listOf("mine"), candidates)
     }
 
     @Test
@@ -283,11 +423,11 @@ class FileStorageEngineTest {
     }
 
     @Test
-    fun evictionCandidateNamesCanBeRemoved() = runTest {
+    fun evictionCandidateKeysCanBeRemoved() = runTest {
         engine.put("a", StorageRecord.create("1", StringSerializer(), createdAt = 100L))
         engine.put("b", StorageRecord.create("2", StringSerializer(), createdAt = 200L))
 
-        // The candidates are file names, which must stay valid inputs to remove().
+        // Whatever the candidates are, they must stay valid inputs to remove().
         engine.evictionCandidates(EvictionStrategy.LRU, limit = 1, now = 0L).forEach { engine.remove(it) }
 
         assertEquals(1L, engine.size())
@@ -320,5 +460,11 @@ class FileStorageEngineTest {
         File(directory, "interrupted.tmp").writeText("garbage")
 
         assertEquals(1L, engine.size(), "a leftover temp file is not a record")
+    }
+
+    private companion object {
+        const val WRITERS = 24
+        const val PAYLOAD_PADDING = 64 * 1024
+        const val HOT_KEY = "hot"
     }
 }
