@@ -33,15 +33,18 @@ fun check(label: String, condition: Boolean, detail: String = "") {
 
 fun cacheDir(name: String) = java.io.File(System.getProperty("java.io.tmpdir"), "kache-consumer-$name")
 
+fun recordCount(dir: File): Int = dir.listFiles().orEmpty().count { it.isFile && !it.name.endsWith(".tmp") }
+
 fun main() {
     println("Kache 0.1.0 — проверка как внешней зависимости")
-    println("  путь: /Users/vyacheslav/StudioProjects/Kache/build/repo")
+    println("  репозиторий: build/repo")
     println()
 
     persistenceAcrossProcesses()
     evictionStrategies()
     capacityLimit()
-    strategiesAndErrors()
+    readStrategiesAndCorruption()
+    keySafety()
 
     println()
     if (failures == 0) println("ИТОГ: все проверки пройдены") else println("ИТОГ: провалено $failures")
@@ -54,19 +57,25 @@ fun persistenceAcrossProcesses() = runBlocking {
     val dir = cacheDir("persist")
     dir.deleteRecursively()
 
-    val first = L2KmpCache<String, UserProfile>(storageEngine = FileStorageEngine(dir.absolutePath), valueSerializer = serializer)
+    val first = L2KmpCache<String, UserProfile>(
+        storageEngine = FileStorageEngine(dir.absolutePath),
+        valueSerializer = serializer,
+    )
     first.put("profile", UserProfile("u-1", "Vyacheslav"), ttl = 1.hours)
-    check("запись создана на диске", File(dir, "profile").exists(), "файла нет")
+    check("запись создана на диске", recordCount(dir) == 1, "записей ${recordCount(dir)}")
 
     // Совершенно новый экземпляр движка поверх того же каталога — то, что происходит
     // после перезапуска процесса.
-    val second = L2KmpCache<String, UserProfile>(storageEngine = FileStorageEngine(dir.absolutePath), valueSerializer = serializer)
+    val second = L2KmpCache<String, UserProfile>(
+        storageEngine = FileStorageEngine(dir.absolutePath),
+        valueSerializer = serializer,
+    )
     val read = second.get("profile", CacheStrategy.CacheFirst, null).first()
 
-    check("прочитано с диска после \"перезапуска\"", read is CacheResult.Success<*>, "получено $read")
-    val onDisk = read as? CacheResult.Success<*>
-    check("origin = DISK", onDisk?.origin == CacheOrigin.DISK, "origin=${onDisk?.origin}")
-    val profile = onDisk?.data as? UserProfile
+    val success = read as? CacheResult.Success<*>
+    check("прочитано с диска после \"перезапуска\"", success != null, "получено $read")
+    check("origin = DISK", success?.origin == CacheOrigin.DISK, "origin=${success?.origin}")
+    val profile = success?.data as? UserProfile
     check("значение целое", profile?.name == "Vyacheslav", "получено ${profile?.name}")
     println()
 }
@@ -100,15 +109,17 @@ fun evictionStrategies() = runBlocking {
             touchGranularity = kotlin.time.Duration.ZERO,
         )
 
-        cache.put("a", UserProfile("a", "A"), null)          // создан и прочитан в 1000
+        cache.put("a", UserProfile("a", "A"), null)            // создан и прочитан в 1000
         clock.advance(1000.milliseconds)
-        cache.put("b", UserProfile("b", "B"), null)          // создан в 2000
+        cache.put("b", UserProfile("b", "B"), null)            // создан в 2000
         clock.advance(1000.milliseconds)
         cache.get("a", CacheStrategy.CacheFirst, null).first() // "a" становится самым недавним, 3000
         clock.advance(1000.milliseconds)
-        cache.put("c", UserProfile("c", "C"), null)          // 4000, вытеснение
+        cache.put("c", UserProfile("c", "C"), null)            // 4000, вытеснение
 
-        val remaining = listOf("a", "b", "c").filter { File(dir, it).exists() }
+        // Проверяем через движок, а не через имена файлов: имена кодируются, и привязка к
+        // ним сломала бы harness при любой смене кодировки.
+        val remaining = listOf("a", "b", "c").filter { engine.get(it) != null }
         val dropped = listOf("a", "b", "c").filterNot { it in remaining }
         println("  $label: остались $remaining, вытеснен $dropped (ожидался \"$expected\")")
         check("$label соблюдает лимит", remaining.size == 2, "осталось ${remaining.size}")
@@ -130,19 +141,19 @@ fun capacityLimit() = runBlocking {
     )
 
     repeat(50) { i -> cache.put("key-$i", UserProfile("u$i", "User $i"), null) }
+    check("лимит 5 соблюдён при 50 записях", recordCount(dir) == 5, "на диске ${recordCount(dir)}")
 
-    val onDisk = File(dir, "key-0").parentFile!!.listFiles()!!.count { it.isFile }
-    check("лимит 5 соблюдён при 50 записи", onDisk == 5, "на диске $onDisk")
-
-    val withoutLimit = L2KmpCache<String, UserProfile>(storageEngine = FileStorageEngine(dir.absolutePath), valueSerializer = serializer)
+    val withoutLimit = L2KmpCache<String, UserProfile>(
+        storageEngine = FileStorageEngine(dir.absolutePath),
+        valueSerializer = serializer,
+    )
     repeat(10) { i -> withoutLimit.put("free-$i", UserProfile("f$i", "Free $i"), null) }
-    val total = File(dir, "free-0").parentFile!!.listFiles()!!.count { it.isFile }
-    check("без лимита записи не вытесняются", total == 15, "на диске $total, ожидалось 15")
+    check("без лимита записи не вытесняются", recordCount(dir) == 15, "на диске ${recordCount(dir)}")
     println()
 }
 
-fun strategiesAndErrors() = runBlocking {
-    println("4. Стратегии чтения и ошибки")
+fun readStrategiesAndCorruption() = runBlocking {
+    println("4. Стратегии чтения и повреждённые записи")
 
     val dir = cacheDir("strategies")
     dir.deleteRecursively()
@@ -161,23 +172,82 @@ fun strategiesAndErrors() = runBlocking {
     check("CacheFirst берёт из кэша при повторе", (second as? CacheResult.Success)?.origin == CacheOrigin.DISK, "$second")
     check("fetcher вызван ровно один раз", fetches == 1, "вызовов $fetches")
 
-    val stale = cache.get("k", CacheStrategy.CacheFirst, null).first()
-    check("повторное чтение то же значение", ((stale as? CacheResult.Success)?.data as? UserProfile)?.name == "Fetched", "$stale")
-
-    // Просроченная запись не отдаётся как свежая
-    val shortTtl = L2KmpCache<String, UserProfile>(storageEngine = FileStorageEngine(dir.absolutePath), valueSerializer = serializer)
+    // Просроченная запись не отдаётся как свежая.
+    val ttlDir = cacheDir("strategies-ttl")
+    ttlDir.deleteRecursively()
+    val shortTtl = L2KmpCache<String, UserProfile>(
+        storageEngine = FileStorageEngine(ttlDir.absolutePath),
+        valueSerializer = serializer,
+    )
     shortTtl.put("exp", UserProfile("e", "Expired"), ttl = 1.milliseconds)
     Thread.sleep(20)
     val expired = shortTtl.get("exp", CacheStrategy.CacheFirst, null).first()
-    check("просроченная запись не отдаётся", expired !is CacheResultValue, "$expired")
+    check("просроченная запись не отдаётся", expired !is CacheResult.Success<*>, "$expired")
 
-    // Ошибка десериализации
-    val broken = java.io.File(dir, "broken")
-    broken.writeText("v2|1|0|1|999|мусор")
-    val afterBroken = L2KmpCache<String, UserProfile>(storageEngine = FileStorageEngine(dir.absolutePath), valueSerializer = serializer)
-    val result = afterBroken.get("broken", CacheStrategy.CacheFirst, null).first()
-    check("битый файл даёт промах, а не исключение", result !is CacheResultValue, "$result")
+    // Порча заголовка: объявленная длина не помещается в файл.
+    checkCorruptRecordIsAMiss("порченый заголовок", "v2|1|0|1|999|мусор")
     println()
 }
 
-typealias CacheResultValue = io.github.slavikjunior.kache.core.CacheResult.Success<*>
+/**
+ * Пишет файл записи для ключа, затем перезаписывает его байтами [corruptBody].
+ *
+ * Имя файла не задаётся вручную: движок кодирует ключи, поэтому файл сначала создаётся
+ * обычной записью, а потом портится найденный файл. Хардкод имени сломался бы при смене
+ * кодировки и увёл бы проверку в сторону.
+ */
+suspend fun checkCorruptRecordIsAMiss(label: String, corruptBody: String) {
+    val dir = cacheDir("corrupt")
+    dir.deleteRecursively()
+    val engine = FileStorageEngine(dir.absolutePath)
+    val cache = L2KmpCache<String, UserProfile>(storageEngine = engine, valueSerializer = serializer)
+
+    cache.put("victim", UserProfile("v", "Victim"), null)
+    val file = dir.listFiles().orEmpty().single()
+    file.writeText(corruptBody)
+
+    val result = cache.get("victim", CacheStrategy.CacheFirst, null).first()
+    check("$label даёт промах, а не исключение", result !is CacheResult.Success<*>, "$result")
+}
+
+fun keySafety() = runBlocking {
+    println("5. Свойства ключей")
+
+    val dir = cacheDir("keys")
+    dir.deleteRecursively()
+    val parent = dir.parentFile
+    val engine = FileStorageEngine(dir.absolutePath)
+    val cache = L2KmpCache<String, UserProfile>(storageEngine = engine, valueSerializer = serializer)
+
+    // Раньше эти три ключа схлопывались в один файл: запись одного молча затирала другой,
+    // а чтение любого возвращало значение чужого ключа.
+    val colliding = listOf("user:1", "user/1", "user_1")
+    colliding.forEachIndexed { index, key ->
+        cache.put(key, UserProfile("u$index", "Value $index"), null)
+    }
+    check("разные ключи не делят один файл", recordCount(dir) == 3, "записей ${recordCount(dir)}")
+    val values = colliding.mapIndexed { index, key ->
+        (cache.get(key, CacheStrategy.CacheFirst, null).first() as? CacheResult.Success<*>)?.data as? UserProfile
+    }
+    check(
+        "каждый ключ возвращает своё значение",
+        values.map { it?.name } == listOf("Value 0", "Value 1", "Value 2"),
+        "получено ${values.map { it?.name }}",
+    )
+
+    // Ключ ".." раньше указывал на родительский каталог: put падал, а remove мог удалить его.
+    val traversalDir = cacheDir("keys-traversal")
+    traversalDir.deleteRecursively()
+    val traversalCache = L2KmpCache<String, UserProfile>(
+        storageEngine = FileStorageEngine(traversalDir.absolutePath),
+        valueSerializer = serializer,
+    )
+    traversalCache.put("..", UserProfile("t", "Traversal"), null)
+    traversalCache.put(".", UserProfile("t", "Dot"), null)
+    traversalCache.put("", UserProfile("t", "Empty"), null)
+    check("ключи . и .. не выходят из каталога", recordCount(traversalDir) == 3, "записей ${recordCount(traversalDir)}")
+    check("родительский каталог не тронут", parent?.isDirectory == true, "родителя нет")
+    val traversalRead = traversalCache.get("..", CacheStrategy.CacheFirst, null).first()
+    check("ключ .. читается как обычная запись", traversalRead is CacheResult.Success<*>, "$traversalRead")
+    println()
+}
