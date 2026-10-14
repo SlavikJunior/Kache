@@ -6,8 +6,6 @@ import io.github.slavikjunior.kache.core.StorageRecord
 import io.github.slavikjunior.kache.core.recordComparator
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.PriorityQueue
 
 /**
@@ -25,6 +23,10 @@ import java.util.PriorityQueue
  * still useful is a decision for the caching strategy above, so that a strategy such as
  * `StaleWhileRevalidate` can still read a stale value. Reaping is therefore explicit,
  * through [removeExpired] or [clear].
+ *
+ * Only `java.io` is used here, never `java.nio.file`. The latter arrived in Android API 26
+ * while this module declares `minSdk 23`, and core library desugaring is not enabled, so a
+ * `Files.readAllBytes` would throw `NoClassDefFoundError` on API 23–25 devices.
  *
  * @param rootDirectory Directory holding the record files. Created if missing.
  * @param maxRecordBytes Largest record this engine will read or write. A cache payload is
@@ -91,14 +93,9 @@ public class FileStorageEngine(
             // A fresh temporary file per write. A fixed name derived from the target would
             // be shared by concurrent writers of the same key, and one of them would move
             // the other's partially written bytes into place.
-            temp = Files.createTempFile(rootDir.toPath(), TEMP_PREFIX, TEMP_SUFFIX).toFile()
-            Files.write(temp.toPath(), encoded)
-            Files.move(
-                temp.toPath(),
-                target.toPath(),
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE,
-            )
+            temp = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, rootDir)
+            temp.writeBytes(encoded)
+            moveIntoPlace(temp, target)
         } catch (e: IOException) {
             temp?.delete()
             throw KacheException.DiskWriteException(e)
@@ -240,7 +237,20 @@ public class FileStorageEngine(
      */
     private fun readEncoded(file: File): ByteArray? {
         if (file.length() > maxRecordBytes) return null
-        return Files.readAllBytes(file.toPath())
+        return file.readBytes()
+    }
+
+    /**
+     * Moves [source] onto [target], replacing whatever was there.
+     *
+     * On Linux and Android `File.renameTo` is `rename(2)`: atomic, and it replaces an existing
+     * file. Neither is guaranteed on every platform, so a failure falls back to a copy, which
+     * is not atomic and is therefore only reached where the atomic move is unavailable.
+     */
+    private fun moveIntoPlace(source: File, target: File) {
+        if (source.renameTo(target)) return
+        source.copyTo(target, overwrite = true)
+        source.delete()
     }
 
     private companion object {
