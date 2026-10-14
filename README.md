@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-470%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-486%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -63,6 +63,7 @@ comes from memory, from disk or from the network, and it tells you which one it 
   - [10. Bounding how much L2 keeps](#10-bounding-how-much-l2-keeps)
   - [11. Testing TTL without waiting](#11-testing-ttl-without-waiting)
 - [Which backend should I use?](#which-backend-should-i-use)
+- [Security considerations](#security-considerations)
 - [Dependencies this library brings in](#dependencies-this-library-brings-in)
 - [Architecture](#architecture)
 - [Building from source](#building-from-source)
@@ -553,6 +554,47 @@ entirely healthy while `maxSize` does nothing at all. If you set `maxSize`, impl
 first, with expired records ahead of whatever the strategy ranks — see
 [recipe 10](#10-bounding-how-much-l2-keeps) for the ordering the library relies on.
 
+## Security considerations
+
+A cache holds whatever an app decided was worth keeping, which is often worth protecting.
+What this library does and does not do about that.
+
+**Cached data is not encrypted.** A payload is written exactly as the serializer produced it.
+If an app caches tokens or personal data, that data is readable by anything that can read the
+file — including a device backup. The library offers no encryption; wrap the serializer if you
+need it, or do not cache secrets.
+
+**Where the data lands is the app's call, and the defaults differ per backend.** Room and
+`FileStorageEngine`, both through `createFromContext`, use the app's **cache** directory, which
+Android excludes from Auto Backup and may purge at any time. iOS's `createFromCachesDirectory`
+uses `NSCachesDirectory` for the same reason. The JVM factories take a path you supply, so a
+backed-up or shared location is possible — deliberately, but then it is your decision.
+
+**Keys end up on disk.** The file backend encodes the key into the file name, and the encoding
+is reversible, so a key can be recovered from a directory listing. Keys are identifiers, not
+secrets: do not put a token, an e-mail address or a session id in one. Distinct keys always map
+to distinct files, so two keys can never collide onto one record and be served each other's
+value.
+
+**Set `maxSize` for anything that outlives a screen.** An unbounded cache grows until the
+device runs out of space, and expired records are only removed when a key is read or
+overwritten. Both factories default to unbounded on purpose — bounding also turns on access
+tracking, which costs a write per key per touch window — so the limit is yours to pass.
+
+**Records are not authenticated.** Nothing detects a cached value edited on disk, and the
+timestamps a record carries decide when it expires, so anyone able to write to the cache
+directory can keep a modified value alive. Treat the cache directory as untrusted: the library
+does, and a record it cannot parse becomes a miss rather than an error.
+
+**Untrusted input is bounded.** A record over `maxRecordBytes` (16 MiB by default) is refused
+on write and never loaded on read, and a record that fails to decode is dropped instead of
+being served or thrown.
+
+**No network, no logging, no telemetry.** The library performs no I/O beyond the storage
+backend you hand it, writes nothing to the log, and sends nothing anywhere.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
 ## Dependencies this library brings in
 
 | Module | Transitive dependencies |
@@ -637,14 +679,14 @@ device:
 `0.1.0`. All seven roadmap phases are implemented, plus capacity limits, eviction
 strategies and optional expired-record reaping.
 
-**Test coverage** — 470 tests, green on every host:
+**Test coverage** — 486 tests, green on every host:
 
 | Module | JVM | Android host | iOS simulator |
 |---|---:|---:|---:|
 | `:cache-core` | 113 | 113 | 113 |
-| `:cache-storage` | 49 | — | — |
-| `:cache-store-room` | 23 | 7 | 20 |
-| `:cache-android` | — | 32 | — |
+| `:cache-storage` | 58 | — | — |
+| `:cache-store-room` | 23 | 11 | 20 |
+| `:cache-android` | — | 35 | — |
 
 `:cache-core` runs one set of `commonTest` sources on all three hosts, so its count is identical
 by construction. `:cache-store-room` has a single shared contract with thin per-platform
