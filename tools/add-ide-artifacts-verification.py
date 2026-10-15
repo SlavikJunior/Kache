@@ -69,6 +69,7 @@ class Summary:
     missing_in_cache: list[Request] = dataclasses.field(default_factory=list)
     unverifiable: list[Request] = dataclasses.field(default_factory=list)
     no_descriptor: list[Request] = dataclasses.field(default_factory=list)
+    gradle_only: list[Request] = dataclasses.field(default_factory=list)
     mismatched: list[tuple[Request, str, str]] = dataclasses.field(default_factory=list)
 
 
@@ -188,6 +189,10 @@ def _component_blocks(lines: list[str]):
             index += 1
 
 
+def is_descriptor_file(filename: str) -> bool:
+    return filename.endswith((".module", ".pom"))
+
+
 def is_descriptor(name: str, request: Request) -> bool:
     """Дескриптор модуля: `<name>-<version>.module` или `.pom` этого же модуля."""
     return name in {f"{request.name}-{request.version}.module", f"{request.name}-{request.version}.pom"}
@@ -231,6 +236,12 @@ def plan(requests: set[Request], cache: str, lines: list[str]) -> tuple[Summary,
         names = existing.get((request.group, request.name, request.version), set())
         if request.filename in names:
             summary.already.append(request)
+            continue
+        # Дескриптор (.module/.pom) сам себя подтвердить не может: в нём нет sha256 его
+        # собственного содержимого. Такой checksum даёт только Gradle при скачивании из
+        # репозитория, поэтому инструмент его не пишет вовсе.
+        if is_descriptor_file(request.filename):
+            summary.gradle_only.append(request)
             continue
         # Gradle при резолве документации сначала проверяет дескриптор модуля (.module/.pom).
         # Записать sources без него — получить падение верификации на дескрипторе, а не на
@@ -328,14 +339,17 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"добавлено: {len(summary.added)}, уже было: {len(summary.already)}, "
           f"нет в кэше: {len(summary.missing_in_cache)}, без подтверждения: {len(summary.unverifiable)}, "
-          f"без дескриптора модуля: {len(summary.no_descriptor)}")
+          f"без дескриптора модуля: {len(summary.no_descriptor)}, "
+          f"дескрипторы только через Gradle: {len(summary.gradle_only)}")
     for request in summary.missing_in_cache:
         print(f"  - нет в кэше: {request.filename} ({request.coords})")
     for request in summary.unverifiable:
         print(f"  - нет подтверждения (.module/sha256): {request.filename} ({request.coords})")
     for request in summary.no_descriptor:
         print(f"  - нет дескриптора модуля в metadata: {request.filename} ({request.coords})")
-    if summary.missing_in_cache or summary.unverifiable or summary.no_descriptor:
+    for request in summary.gradle_only:
+        print(f"  - дескриптор записывает только Gradle: {request.filename} ({request.coords})")
+    if summary.missing_in_cache or summary.unverifiable or summary.no_descriptor or summary.gradle_only:
         print("Такие артефакты запишет Gradle: ./gradlew --write-verification-metadata sha256 "
               "recordIdeIndexingArtifacts")
         return EXIT_SKIPPED

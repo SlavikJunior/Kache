@@ -695,12 +695,25 @@ The task does not resolve transitive graphs: a documentation request for one mod
 drag in unrelated binaries. It inspects only the attributes of the selected module variant, so
 a module that publishes no documentation is skipped rather than recorded as its main jar.
 
+Its component list is not limited to what is already in the file. The Gradle distribution puts
+its own runtime libraries in `lib/`, and their versions change with the wrapper: Gradle 9.6.1
+ships `org.apache.groovy:groovy:4.0.32`, while the metadata recorded 4.0.29 from an older
+distribution. During sync Android Studio requests the documentation variant of the new library
+and fails on `groovy-4.0.32-sources.jar` and its `.module` descriptor. The task therefore also
+reads the coordinates the distribution itself writes next to each library in
+`gradle.gradleHomeDir/lib/*.properties` (`alias.group`, `alias.name`, `alias.version`), so a
+Gradle upgrade is covered as a class — including BOM-only aliases such as `junit-bom` that have
+no jar — instead of by hardcoding one coordinate. Files without `alias.group` are Gradle's own
+internal modules and are skipped.
+
 `tools/add-ide-artifacts-verification.py` is an offline companion for when Gradle cannot run.
 It takes the requests Gradle itself made (HTML reports in `build/reports/dependency-verification/`,
 falling back to `idea.log`, which rotates), and it records a checksum only when the module's
 Gradle Module Metadata lists that file with a `sha256` and the cached file matches it. It never
 records a module's documentation without its `.module`/`.pom` descriptor being present already,
-because Gradle verifies the descriptor first and a missing one fails the build. Its exit codes:
+because Gradle verifies the descriptor first and a missing one fails the build. A request for the
+descriptor itself is left to Gradle: no `.module`/`.pom` contains the `sha256` of its own bytes.
+Its exit codes:
 0 — nothing left to record; 1 — some requests need Gradle; 2 — a checksum did not match and nothing
 was written.
 

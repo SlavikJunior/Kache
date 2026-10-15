@@ -3,6 +3,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.attributes.Category
+import org.gradle.api.attributes.DocsType
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform) apply false
@@ -34,7 +35,7 @@ apiValidation {
  * Читается из самого файла верификации, а не из списка в скрипте: набор растёт при
  * каждом обновлении зависимости, и любая копия в коде рано или поздно устареет.
  */
-val verifiedComponents: List<Triple<String, String, String>> by lazy {
+val recordedComponents: List<Triple<String, String, String>> by lazy {
     val file = file("gradle/verification-metadata.xml")
     if (!file.exists()) return@lazy emptyList()
     val document = javax.xml.parsers.DocumentBuilderFactory.newInstance()
@@ -53,8 +54,53 @@ val verifiedComponents: List<Triple<String, String, String>> by lazy {
 }
 
 /**
- * Резолвит документационные варианты (`sources`, `javadoc`, `samples-sources`) для всех
- * компонент из `verification-metadata.xml`.
+ * Библиотеки, которые сам дистрибутив Gradle кладёт в `lib/`, с координатами из его же
+ * `*.properties`-файлов.
+ *
+ * Это не список и не хардкод одной координаты. Рядом с каждым внешним jar дистрибутив
+ * кладёт `<name>.properties` с полями `alias.group`, `alias.name`, `alias.version` (и
+ * `jarFile`), поэтому координаты берутся у самого Gradle, а не угадываются. Gradle 9.4.1
+ * шёл с Groovy 4.0.29, Gradle 9.6.1 — с 4.0.32 и `junit-bom:5.12.2`.
+ * `verification-metadata.xml` помнит версии предыдущего дистрибутива, поэтому IDE получает
+ * sources новой библиотеки, которой в метаданных ещё нет, и падает на Sync. CLI этого не
+ * видит: `check` не резолвит документационные варианты встроенных библиотек Gradle.
+ * Файлы без `alias.group` (собственные `gradle-*` модули) пропускаются: это не внешние
+ * Maven-компоненты, и документации в репозитории для них нет.
+ */
+val embeddedComponents: List<Triple<String, String, String>> by lazy {
+    val lib = gradle.gradleHomeDir?.resolve("lib")?.takeIf { it.isDirectory } ?: return@lazy emptyList()
+    lib.listFiles()
+        .orEmpty()
+        .filter { it.isFile && it.extension == "properties" }
+        .mapNotNull { alias ->
+            val properties = java.util.Properties()
+            alias.inputStream().use(properties::load)
+            val group = properties.getProperty("alias.group")?.takeIf { it.isNotBlank() }
+            val name = properties.getProperty("alias.name")?.takeIf { it.isNotBlank() }
+            val version = properties.getProperty("alias.version")?.takeIf { it.isNotBlank() }
+            if (group == null || name == null || version == null) null else Triple(group, name, version)
+        }
+        .distinct()
+        .sortedWith(compareBy({ it.first }, { it.second }, { it.third }))
+}
+
+/**
+ * Виды документации, которые IDE запрашивает для индексов. Это стандартные значения
+ * атрибута `org.gradle.docstype` самого Gradle, а не список имён файлов. Вариант `sources`
+ * несёт и KMP-`-common-sources`, и AndroidX-`-samples-sources`, и плагинные
+ * `-gradle813-sources` — это файлы того же варианта, а не отдельный `docstype`.
+ */
+val documentationKinds: List<String> = listOf(DocsType.SOURCES, DocsType.JAVADOC)
+
+/** Всё, что задача должна покрыть: записанные компоненты плюс библиотеки дистрибутива. */
+val verifiedComponents: List<Triple<String, String, String>> by lazy {
+    (recordedComponents + embeddedComponents).distinct()
+}
+
+/**
+ * Резолвит документационные варианты (`sources`, `javadoc` и файлы `-common-sources` /
+ * `-samples-sources` этих вариантов) для всех компонент из `verification-metadata.xml`, а
+ * также для библиотек, которые положил в `lib/` сам дистрибутив Gradle.
  *
  * Зачем это нужно. `--write-verification-metadata` записывает только то, что реально
  * разрешил CLI-процесс. Android Studio при sync строит модель всех вариантов проекта,
@@ -90,63 +136,69 @@ tasks.register("recordIdeIndexingArtifacts") {
     val components = verifiedComponents
 
     doLast {
-        val category = objects.named(Category::class.java, "documentation")
-
-        fun documentationConfiguration(coordinates: String) =
-            configurations.detachedConfiguration(dependencies.create(coordinates)).apply {
-                // Транзитивность выключена: иначе detached-конфигурация тянет весь граф
-                // модуля и записывает несвязанные бинарники (guava 18, protobuf-java 3.19).
-                isTransitive = false
-                attributes {
-                    attribute(Category.CATEGORY_ATTRIBUTE, category)
-                }
-            }
+        val documentation = objects.named(Category::class.java, "documentation")
 
         /**
-         * Публикует ли модуль документационный вариант. Смотрим только граф
-         * (`resolutionResult`), а не файлы: скачивание даже отбракованного бинарника
-         * `--write-verification-metadata` записал бы в metadata. Корневой компонент
-         * конфигурации не учитываем, он всегда несёт запрошенный Category.
+         * Выбрал ли Gradle именно документационный вариант модуля нужного вида. Смотрим на
+         * граф (`resolutionResult`), а не на файлы: скачивание даже отбракованного файла
+         * `--write-verification-metadata` записал бы в metadata. Так попадали `gson`,
+         * `jsoup`, `commons-compress`: у POM-модулей без документации Gradle выбирает
+         * основной jar, и без этой проверки он уходил бы в metadata.
          */
-        fun publishesDocumentation(configuration: Configuration): Boolean =
+        fun selectsDocumentation(configuration: Configuration, kind: String): Boolean =
             configuration.incoming.resolutionResult.allComponents
                 .filter { it.id is ModuleComponentIdentifier }
                 .flatMap { it.variants }
-                .any { it.attributes.getAttribute(Category.CATEGORY_ATTRIBUTE)?.name == "documentation" }
-
-        // Разведка. Ошибка здесь — не повод молча пропустить компоненту: непроверенный граф
-        // означает, что sync снова упадёт, поэтому собираем все такие сбои и валим задачу.
-        val discoverable = mutableListOf<Triple<String, String, String>>()
-        val discoveryFailures = mutableListOf<String>()
-        components.forEach { (group, name, version) ->
-            try {
-                if (publishesDocumentation(documentationConfiguration("$group:$name:$version"))) {
-                    discoverable += Triple(group, name, version)
+                .any { variant ->
+                    variant.attributes.getAttribute(Category.CATEGORY_ATTRIBUTE)?.name == "documentation" &&
+                        variant.attributes.getAttribute(DocsType.DOCS_TYPE_ATTRIBUTE)?.name == kind
                 }
-            } catch (failure: Exception) {
-                discoveryFailures += "$group:$name:$version: ${failure.message?.lineSequence()?.firstOrNull()}"
+
+        fun configurationFor(coordinates: String, kind: String): Configuration =
+            configurations.detachedConfiguration(dependencies.create(coordinates)).apply {
+                isTransitive = false
+                attributes {
+                    attribute(Category.CATEGORY_ATTRIBUTE, documentation)
+                    attribute(DocsType.DOCS_TYPE_ATTRIBUTE, objects.named(DocsType::class.java, kind))
+                }
+            }
+
+        // Разведка: граф для каждой пары «компонента–вид». Файлы здесь не скачиваем.
+        // Сбой графа — не повод молча пропустить модуль: собираем и валим задачу.
+        val discoverable = mutableListOf<Pair<Triple<String, String, String>, String>>()
+        val discoveryFailures = mutableListOf<String>()
+        components.forEach { component ->
+            val (group, name, version) = component
+            documentationKinds.forEach { kind ->
+                try {
+                    if (selectsDocumentation(configurationFor("$group:$name:$version", kind), kind)) {
+                        discoverable += component to kind
+                    }
+                } catch (failure: Exception) {
+                    discoveryFailures += "$group:$name:$version [$kind]: ${failure.message?.lineSequence()?.firstOrNull()}"
+                }
             }
         }
         if (discoveryFailures.isNotEmpty()) {
             throw GradleException(
-                "Не удалось определить документационные варианты для ${discoveryFailures.size} компонент:\n" +
+                "Не удалось определить документационные варианты для ${discoveryFailures.size} случаев:\n" +
                     discoveryFailures.joinToString("\n") { "  - $it" },
             )
         }
 
-        // Скачивание: только для модулей, которые документационный вариант действительно публикуют.
-        // Строгое представление без lenient: непроверенный артефакт обязан валить задачу.
+        // Скачивание: строго, без перехвата. Любой непроверенный файл валит задачу.
         var files = 0
-        discoverable.forEach { (group, name, version) ->
-            val resolved = documentationConfiguration("$group:$name:$version")
-                .incoming.artifactView { lenient(false) }.artifacts.artifactFiles.files
+        discoverable.forEach { (component, kind) ->
+            val (group, name, version) = component
+            val configuration = configurationFor("$group:$name:$version", kind)
+            val resolved = configuration.incoming.artifactView { lenient(false) }.artifacts.artifactFiles.files
             files += resolved.size
-            resolved.forEach { logger.lifecycle("  ${it.name}  ($group:$name:$version)") }
+            resolved.forEach { logger.lifecycle("  ${it.name}  ($group:$name:$version, $kind)") }
         }
 
         logger.lifecycle(
             "Документационные варианты: ${components.size} компонент, " +
-                "${discoverable.size} публикуют их, $files файлов разрезолвлено.",
+                "${discoverable.size} пар «компонента–вид» публикуют документацию, $files файлов разрезолвлено.",
         )
     }
 }
