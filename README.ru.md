@@ -10,12 +10,12 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-515%20green-1D6B4F.svg)](#покрытие-тестами)
+[![Tests](https://img.shields.io/badge/tests-541%20green-1D6B4F.svg)](#покрытие-тестами)
 
 [English](README.md) · **Русский**
 
 </div>
-[![Maven Central](https://img.shields.io/badge/maven--central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
+[![Maven Central](https://img.shields.io/badge/maven--central-not%20published%20yet-lightgrey)](#статус-проекта)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Кэш для Kotlin Multiplatform с двумя уровнями, реактивным пайплайном стратегий и одним API,
@@ -45,6 +45,7 @@ cache.get(
 - [Зачем ещё одна библиотека кэша](#зачем-ещё-одна-библиотека-кэша)
 - [Поддержка платформ](#поддержка-платформ)
 - [Установка](#установка)
+  - [Требования к потребителю](#требования-к-потребителю)
 - [Ключевые понятия](#ключевые-понятия)
   - [Уровни и путь чтения](#уровни-и-путь-чтения)
   - [Стратегии](#стратегии)
@@ -146,8 +147,23 @@ dependencies {
 ```
 
 Gradle Module Metadata несёт вариант под каждую платформу, поэтому обычный Android-проект
-подхватывает AAR и никогда не видит артефакты Kotlin/Native. В classpath попадает только
-`kotlin-stdlib`, `kotlinx-coroutines` и `kotlinx-datetime`.
+подхватывает AAR и никогда не видит артефакты Kotlin/Native. Для `:cache-core` в classpath
+попадают только `kotlin-stdlib` и `kotlinx-coroutines`; L2-бэкенд добавляет
+`kotlinx-serialization` (через `:cache-storage`) либо Room/SQLite (через `:cache-store-room`).
+
+### Требования к потребителю
+
+| Требование | Значение | Почему |
+|---|---|---|
+| Kotlin | **2.4.20 или новее** | Публикуемые метаданные собраны компилятором 2.4.20, а API использует `kotlin.time.Duration` / `kotlin.time.Clock`. Более старый компилятор метаданные не прочитает. |
+| Android Gradle Plugin | **9.x** | Android-артефакты производит `com.android.kotlin.multiplatform.library`; AGP 9 вдобавок включает поддержку Kotlin. |
+| `compileSdk` | **36 или новее** | Каждый библиотечный модуль записывает `compileSdk 36` в метаданные AAR, а AGP отказывается подключать AAR, собранный против более нового API, чем у потребителя. |
+| `minSdk` | **23** | Нижняя граница, объявленная всеми четырьмя артефактами. |
+| Gradle | **9.x** | Сборка идёт на 9.6.1 и публикует стандартные Gradle Module Metadata. |
+| iOS-таргеты | `:cache-core` — `iosArm64`, `iosSimulatorArm64`, `iosX64`; `:cache-store-room` — только `iosArm64`, `iosSimulatorArm64` | У `androidx.sqlite` 2.7.1 нет варианта `iosX64`, поэтому проект с таргетом `iosX64` обязан держать `:cache-store-room` вне `commonMain`. |
+
+`:cache-storage` существует только для jvm/android, поэтому его место — `jvmMain`/`androidMain`,
+но не `commonMain` проекта, который целится ещё и в iOS.
 
 Требуется `minSdk 23`.
 
@@ -598,7 +614,7 @@ Android исключает из Auto Backup и может очистить в л
 
 | Модуль | Транзитивные зависимости |
 |---|---|
-| `:cache-core` | `kotlinx-coroutines-core`, `kotlinx-datetime` |
+| `:cache-core` | `kotlinx-coroutines-core` |
 | `:cache-storage` | предыдущие + `kotlinx-serialization-json` |
 | `:cache-store-room` | предыдущие + `androidx.room`, `androidx.sqlite` |
 | `:cache-android` | предыдущие + `androidx.lifecycle:lifecycle-viewmodel` |
@@ -656,8 +672,35 @@ WorkManager.
 ./gradlew check                    # тесты: JVM, Android-хост, iOS-симулятор
 ./gradlew apiCheck                 # проверка совместимости ABI
 ./gradlew :sample-android:assembleDebug
-./gradlew publishAllPublicationsToLocalRepository
+./gradlew verifyLocalPublication   # публикует локально и проверяет состав артефактов
 ```
+
+`verifyLocalPublication` — гейт, которого не даёт сама публикация: Gradle спокойно сообщает об
+успехе для публикации без `-sources.jar`, а Maven Central такую не примет. Задача проверяет у
+каждой публикации POM, module-дескриптор, непустые sources/javadoc и AAR или klib там, где он
+нужен таргету. Пропавшая публикация тоже валит задачу — молча потерянный таргет не пройдёт.
+
+Инструментальный набор Room выполняется на устройстве или эмуляторе — только там загружается
+bundled-драйвер SQLite:
+
+```bash
+./gradlew :cache-store-room:connectedAndroidDeviceTest
+```
+
+В `verification/` лежат три одноразовые сборки, которые потребляют Kache так, как это делает
+реальный пользователь — по координатам из `build/repo`, никогда через `project(...)`. Модульные
+тесты внутри сборки эту границу не пересекают: неверная координата, POM без нужного поля или
+спрятанная `api`-зависимость видны только здесь.
+
+```bash
+./gradlew -p verification/consumer run                      # JVM
+./gradlew -p verification/consumer-android assembleDebug    # обычный Android, варианты AAR
+./gradlew -p verification/consumer-kmp :app:compileKotlinJvm :app:compileKotlinIosArm64
+./gradlew -p verification/consumer-kmp :iosx64:compileKotlinIosX64
+```
+
+`consumer-android` и `consumer-kmp` не объявляют serialization у себя, поэтому перестают
+компилироваться в тот момент, когда `:cache-storage` перестаёт отдавать `KSerializer` как `api`.
 
 Каждая разрешённая зависимость сверяется с записанным SHA-256 из
 `gradle/verification-metadata.xml`, поэтому обновление зависимости валит сборку, пока
@@ -745,27 +788,31 @@ python3 -m unittest discover -s tools/tests -v
 
 ### Покрытие тестами
 
-515 тестов, зелёные на каждом хосте:
+521 тест в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
 
-| Модуль | JVM | Android-хост | iOS-симулятор |
-|---|---:|---:|---:|
-| `:cache-core` | 120 | 120 | 120 |
-| `:cache-storage` | 66 | — | — |
-| `:cache-store-room` | 23 | 11 | 20 |
-| `:cache-android` | — | 35 | — |
+| Модуль | JVM | Android-хост | iOS-симулятор | Android-устройство |
+|---|---:|---:|---:|---:|
+| `:cache-core` | 120 | 120 | 120 | — |
+| `:cache-storage` | 66 | — | — | — |
+| `:cache-store-room` | 23 | 11 | 20 | 20 |
+| `:cache-android` | — | 41 | — | — |
 
 `:cache-core` гоняет один и тот же набор `commonTest` на трёх хостах, поэтому число там совпадает
-по построению. У `:cache-store-room` один общий контракт и тонкие подклассы на платформу,
-которые поставляют только фабрику.
+по построению. У `:cache-store-room` один общий контракт (`RoomStorageEngineTestBase`) и тонкие
+подклассы на платформу, которые поставляют только фабрику, поэтому набор на устройстве проверяет
+тот же контракт, что host и iOS.
 
 **Известные пробелы, названные прямо:**
 
 - **Android API не покрыт проверкой совместимости ABI.** BCV цепляется за Android-таргет
-  KMP только когда его compilation назван `release`, а плагин AGP KMP даёт `main`, поэтому
-  `:cache-android` публикует AAR без golden-файла. Пробел закрыт тестами, а не устранён.
-- `RoomStorageEngineFactory.createFromContext` не проверяется в рантайме host-теста:
-  JNI-библиотека bundled-драйвера собрана под Android ABI и не грузится в host-JVM. Покрыта
-  компиляцией, опубликованным AAR и приложением-примером.
+  KMP только когда его compilation назван `release`, а плагин AGP KMP даёт `main` (проверено
+  вплоть до BCV 0.18.1), поэтому `:cache-android` публикует AAR без golden-файла. Пробел
+  смягчён рефлексия-тестом `PublicApiTest`, который фиксирует публичную поверхность, но не
+  устранён.
+- `createFromContext` — фабрика Room, которую реально вызывают потребители — проверяется на
+  настоящем устройстве набором `RoomStorageEngineAndroidDeviceTest`, где bundled-драйвер
+  SQLite загружается по-настоящему. Host-набор так не может: JNI-библиотека драйвера собрана
+  под Android ABI.
 - **Схема версии 2 — ломающее изменение для существующей базы Room.** `:cache-store-room`
   перешёл с версии 1 на 2 ради колонки `last_accessed_at`. Миграция приложена и подключена во
   всех фабриках, так что существующие строки переносятся и бэкфиллятся из `created_at` — до
