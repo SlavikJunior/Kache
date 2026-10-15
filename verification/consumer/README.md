@@ -60,10 +60,14 @@ The repository path defaults to `../../build/repo`. Override it with
 
 ## Dependency verification
 
-The harness resolves from `build/repo`, so it inherits the root build's
-`gradle/verification-metadata.xml`: an artifact that is published but whose checksum was not
-recorded fails here first. That is the point of running it against a coordinate rather than
-against `project(...)` — the boundary is where packaging goes wrong.
+This is a separate Gradle build, so it does **not** inherit the root build's
+`gradle/verification-metadata.xml` — the locally published Kache artifacts would fail it,
+since their checksums change on every local publication. What the harness proves instead is
+that the artifacts are *resolvable and compilable* as coordinates; checksums of the
+third-party dependencies stay the root build's concern.
+
+It declares no `kotlinx-serialization` dependency of its own, so it also fails to compile the
+moment `:cache-storage` stops exposing `KSerializer` as `api`.
 
 ## In CI
 

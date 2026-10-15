@@ -28,6 +28,19 @@ kotlin {
             // what lets the Context-based `createFromContext` path be tested on the host.
             isIncludeAndroidResources = true
         }
+
+        // Instrumented tests are the only place the bundled SQLite driver can actually
+        // load: its JNI library is built for Android ABIs and fails in a host JVM, so the
+        // host test above has to use the framework driver instead. The device suite closes
+        // that gap by exercising the real driver and `createFromContext` on an emulator.
+        //
+        // `sourceSetTreeName = "test"` places the device source set in the test tree, so it
+        // reuses the shared contract from `commonTest` rather than duplicating it.
+        withDeviceTestBuilder {
+            sourceSetTreeName = "test"
+        }.configure {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        }
     }
 
     iosArm64()
@@ -66,6 +79,17 @@ kotlin {
                 implementation(libs.androidx.sqlite.framework)
             }
         }
+
+        // Runs on a device/emulator, where the bundled driver loads for real.
+        val androidDeviceTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.kotlinx.coroutines.test)
+                implementation(libs.androidx.test.core)
+                implementation(libs.androidx.test.runner)
+                implementation(libs.androidx.test.ext.junit)
+            }
+        }
     }
 }
 
@@ -100,14 +124,18 @@ dependencies {
 
 // Room must not be processed for test source sets: the schema would be emitted for test
 // fixtures and the generated code is only needed by the main compilation. Test KSP tasks
-// are named `kspTestKotlin<Target>` for the KMP targets and `kspAndroidHostTest` for the
-// Android host-test compilation.
+// are named `kspTestKotlin<Target>` for the KMP targets, `kspAndroidHostTest` for the
+// Android host-test compilation and `kspAndroidDeviceTest` for the instrumented one.
 //
 // The `ksp` prefix is essential: matching only on "HostTest" also matches
 // `compileAndroidHostTest`, which silently disables the whole Android host test run.
 afterEvaluate {
     tasks.matching {
-        it.name.startsWith("ksp") && (it.name.startsWith("kspTest") || it.name.contains("HostTest"))
+        it.name.startsWith("ksp") && (
+            it.name.startsWith("kspTest") ||
+                it.name.contains("HostTest") ||
+                it.name.contains("DeviceTest")
+            )
     }.configureEach {
         enabled = false
     }

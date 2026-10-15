@@ -11,7 +11,11 @@ dependencies {
     // координаты, POM, sources и javadoc-артефакты.
     implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
     implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+
+    // kotlinx-serialization намеренно не объявляется: `KSerializer` стоит в публичном
+    // конструкторе `KotlinxJsonSerializer`, поэтому `:cache-storage` обязан отдавать его
+    // как `api`. Если скоуп откатится к `implementation`, этот модуль перестанет
+    // компилироваться — что и есть проверка.
 }
 
 application { mainClass.set("MainKt") }

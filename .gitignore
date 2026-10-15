@@ -8,8 +8,12 @@ local.properties
 */out/
 */build/
 # `*/build/` does not cross directory separators, so the nested consumer harness build
-# directory would not be matched by it.
+# directories are not matched by it and have to be listed explicitly.
 verification/consumer/build/
+verification/consumer-android/build/
+verification/consumer-kmp/build/
+verification/consumer-kmp/app/build/
+verification/consumer-kmp/iosx64/build/
 
 # IDE / OS мусор
 *.hprof
