@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-486%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-515%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -678,12 +678,12 @@ device:
 `0.1.0`. All seven roadmap phases are implemented, plus capacity limits, eviction
 strategies and optional expired-record reaping.
 
-**Test coverage** — 486 tests, green on every host:
+**Test coverage** — 515 tests, green on every host:
 
 | Module | JVM | Android host | iOS simulator |
 |---|---:|---:|---:|
-| `:cache-core` | 113 | 113 | 113 |
-| `:cache-storage` | 58 | — | — |
+| `:cache-core` | 120 | 120 | 120 |
+| `:cache-storage` | 66 | — | — |
 | `:cache-store-room` | 23 | 11 | 20 |
 | `:cache-android` | — | 35 | — |
 

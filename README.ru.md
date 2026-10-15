@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-486%20green-1D6B4F.svg)](#покрытие-тестами)
+[![Tests](https://img.shields.io/badge/tests-515%20green-1D6B4F.svg)](#покрытие-тестами)
 
 [English](README.md) · **Русский**
 
@@ -679,12 +679,12 @@ WorkManager.
 
 ### Покрытие тестами
 
-486 тестов, зелёные на каждом хосте:
+515 тестов, зелёные на каждом хосте:
 
 | Модуль | JVM | Android-хост | iOS-симулятор |
 |---|---:|---:|---:|
-| `:cache-core` | 113 | 113 | 113 |
-| `:cache-storage` | 58 | — | — |
+| `:cache-core` | 120 | 120 | 120 |
+| `:cache-storage` | 66 | — | — |
 | `:cache-store-room` | 23 | 11 | 20 |
 | `:cache-android` | — | 35 | — |
 
