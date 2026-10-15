@@ -671,23 +671,27 @@ regenerated:
 
 One caveat worth knowing before your first dependency bump: `--write-verification-metadata` only
 records what a CLI invocation actually downloads, and Android Studio downloads more than the
-CLI does. During sync the IDE resolves a detached configuration with the `sources` classifier to
-index dependency sources, so a metadata file generated purely from `check` and
-`assembleDebug` leaves the IDE unable to sync:
+CLI does. During sync the IDE resolves extra configurations to index dependency sources and
+API docs, so a metadata file generated purely from `check` and `assembleDebug` leaves the IDE
+unable to sync:
 
 ```
-Dependency verification failed for configuration ':sample-android:detachedConfiguration2'
-180 artifacts failed verification:
-  - kotlin-stdlib-2.4.20-sources.jar (org.jetbrains.kotlin:kotlin-stdlib:2.4.20) ...
+Dependency verification failed for configuration ':cache-store-room:jvmCompileClasspath'
+20 artifacts failed verification:
+  - asm-9.10.1-javadoc.jar (org.ow2.asm:asm:9.10.1) ...
 ```
 
-The sources artifacts exist in the Gradle cache, so the fix is to hash what is already there.
-`tools/add-ide-sources-verification.py` reads the failed list from the IDE log, computes the
+The artifacts exist in the Gradle cache, so the fix is to hash what is already there.
+`tools/add-ide-artifacts-verification.py` collects the failed list from Gradle's own HTML
+reports in `build/reports/dependency-verification/`, falls back to `idea.log`, computes the
 SHA-256 of each cached file and adds the entries:
 
 ```bash
-python3 tools/add-ide-sources-verification.py
+python3 tools/add-ide-artifacts-verification.py
 ```
+
+Prefer the reports over the log: `idea.log` is rotated, and after a Studio restart the block
+listing the failed artifacts is gone while sync keeps failing.
 
 Regenerate the whole file after a dependency bump rather than patching it, and prove the result
 with `--refresh-dependencies` — without it, verification passes against the cache and proves

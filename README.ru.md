@@ -670,23 +670,27 @@ WorkManager.
 
 Одна оговорка, о которой стоит знать до первого обновления зависимости:
 `--write-verification-metadata` записывает только то, что реально скачал CLI, а Android Studio
-качает больше. При sync IDE резолвит detached-конфигурацию с classifier `sources`, чтобы
-индексировать исходники зависимостей, поэтому файл, сгенерированный только из `check` и
-`assembleDebug`, оставляет IDE без возможности синхронизироваться:
+качает больше. При sync IDE резолвит дополнительные конфигурации, чтобы индексировать исходники
+и документацию зависимостей, поэтому файл, сгенерированный только из `check` и `assembleDebug`,
+оставляет IDE без возможности синхронизироваться:
 
 ```
-Dependency verification failed for configuration ':sample-android:detachedConfiguration2'
-180 artifacts failed verification:
-  - kotlin-stdlib-2.4.20-sources.jar (org.jetbrains.kotlin:kotlin-stdlib:2.4.20) ...
+Dependency verification failed for configuration ':cache-store-room:jvmCompileClasspath'
+20 artifacts failed verification:
+  - asm-9.10.1-javadoc.jar (org.ow2.asm:asm:9.10.1) ...
 ```
 
-Файлы sources уже лежат в кэше Gradle, поэтому решение — посчитать хеши того, что есть.
-`tools/add-ide-sources-verification.py` берёт список непроверенных из лога IDE, считает SHA-256
-каждого файла в кэше и дописывает записи:
+Файлы уже лежат в кэше Gradle, поэтому решение — посчитать хеши того, что есть.
+`tools/add-ide-artifacts-verification.py` собирает список непроверенных из HTML-отчётов Gradle
+в `build/reports/dependency-verification/`, при отсутствии отчётов берёт его из `idea.log`,
+считает SHA-256 каждого файла в кэше и дописывает записи:
 
 ```bash
-python3 tools/add-ide-sources-verification.py
+python3 tools/add-ide-artifacts-verification.py
 ```
+
+Отчётым надёжнее лога: `idea.log` ротируется, и после перезапуска Studio блок со списком
+непроверенных артефактов исчезает, хотя sync продолжает падать.
 
 После обновления зависимости перегенерируйте файл целиком, а не дополняйте, и проверьте
 результат с `--refresh-dependencies` — без него верификация проходит по кэшу и не доказывает
