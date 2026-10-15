@@ -10,12 +10,12 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-515%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-541%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
 </div>
-[![Maven Central](https://img.shields.io/badge/maven--central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
+[![Maven Central](https://img.shields.io/badge/maven--central-not%20published%20yet-lightgrey)](#project-status)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Kotlin Multiplatform cache with two tiers, a reactive strategy pipeline, and one API that
@@ -45,6 +45,7 @@ comes from memory, from disk or from the network, and it tells you which one it 
 - [Why another cache library](#why-another-cache-library)
 - [Platform support](#platform-support)
 - [Installation](#installation)
+  - [Consumer requirements](#consumer-requirements)
 - [Core concepts](#core-concepts)
   - [Tiers and how a read flows through them](#tiers-and-how-a-read-flows-through-them)
   - [Strategies](#strategies)
@@ -145,8 +146,23 @@ dependencies {
 ```
 
 Gradle Module Metadata carries a per-platform variant, so a plain Android project resolves
-the AAR and never sees the Kotlin/Native artifacts. The only things that reach your
-classpath are `kotlin-stdlib`, `kotlinx-coroutines` and `kotlinx-datetime`.
+the AAR and never sees the Kotlin/Native artifacts. For `:cache-core` the only things that
+reach your classpath are `kotlin-stdlib` and `kotlinx-coroutines`; an L2 backend adds
+`kotlinx-serialization` (through `:cache-storage`) or Room/SQLite (through `:cache-store-room`).
+
+### Consumer requirements
+
+| Requirement | Value | Why |
+|---|---|---|
+| Kotlin | **2.4.20 or newer** | The published metadata is compiled by 2.4.20 and the API uses `kotlin.time.Duration` / `kotlin.time.Clock`. An older compiler cannot read the metadata. |
+| Android Gradle Plugin | **9.x** | The Android artifacts are produced by `com.android.kotlin.multiplatform.library`; AGP 9 also provides built-in Kotlin support. |
+| `compileSdk` | **36 or newer** | Every library module records `compileSdk 36` in its AAR metadata, and AGP refuses to consume an AAR built against a newer API than the consumer compiles against. |
+| `minSdk` | **23** | The floor declared by all four artifacts. |
+| Gradle | **9.x** | The build runs on 9.6.1 and publishes standard Gradle Module Metadata. |
+| iOS targets | `:cache-core` — `iosArm64`, `iosSimulatorArm64`, `iosX64`; `:cache-store-room` — `iosArm64`, `iosSimulatorArm64` only | There is no `iosX64` variant of `androidx.sqlite` 2.7.1, so a project with an `iosX64` target must keep `:cache-store-room` out of `commonMain`. |
+
+`:cache-storage` is jvm/android-only, so it belongs in `jvmMain`/`androidMain`, never in the
+`commonMain` of a project that also targets iOS.
 
 Requires `minSdk 23`.
 
@@ -598,7 +614,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 | Module | Transitive dependencies |
 |---|---|
-| `:cache-core` | `kotlinx-coroutines-core`, `kotlinx-datetime` |
+| `:cache-core` | `kotlinx-coroutines-core` |
 | `:cache-storage` | the above + `kotlinx-serialization-json` |
 | `:cache-store-room` | the above + `androidx.room`, `androidx.sqlite` |
 | `:cache-android` | the above + `androidx.lifecycle:lifecycle-viewmodel` |
@@ -657,8 +673,36 @@ same `java.io` implementation; it was previously duplicated per platform.
 ./gradlew check                    # tests: JVM, Android host, iOS simulator
 ./gradlew apiCheck                 # binary-compatibility check
 ./gradlew :sample-android:assembleDebug
-./gradlew publishAllPublicationsToLocalRepository
+./gradlew verifyLocalPublication   # publishes locally and checks the artifact set
 ```
+
+`verifyLocalPublication` is the gate that publishing itself does not provide: Gradle
+happily reports success for a publication with no `-sources.jar`, while Maven Central
+rejects one. The task checks every publication for a POM, a module descriptor, non-empty
+sources and javadoc, and an AAR or klib where the target needs one. It also fails when a
+publication disappears entirely, so a dropped target cannot go unnoticed.
+
+The instrumented Room suite runs on a device or emulator, which is the only place the
+bundled SQLite driver can load:
+
+```bash
+./gradlew :cache-store-room:connectedAndroidDeviceTest
+```
+
+`verification/` contains three throwaway builds that consume Kache the way a real user does —
+as coordinates resolved from `build/repo`, never as `project(...)`. Unit tests inside the
+build cannot cross that boundary; a wrong coordinate, a POM missing a field or a hidden
+`api` dependency only shows up here.
+
+```bash
+./gradlew -p verification/consumer run                      # JVM
+./gradlew -p verification/consumer-android assembleDebug    # plain Android, AAR variants
+./gradlew -p verification/consumer-kmp :app:compileKotlinJvm :app:compileKotlinIosArm64
+./gradlew -p verification/consumer-kmp :iosx64:compileKotlinIosX64
+```
+
+`consumer-android` and `consumer-kmp` declare no serialization dependency of their own, so
+they fail to compile the moment `:cache-storage` stops exposing `KSerializer` as `api`.
 
 Every resolved dependency is checked against a recorded SHA-256 in
 `gradle/verification-metadata.xml`, so a dependency bump fails until the metadata is
@@ -746,28 +790,31 @@ device:
 optional expired-record reaping shipped alongside them, and a thirteen-finding security audit
 is closed out (see `SECURITY.md` and the audit write-up).
 
-**Test coverage** — 515 tests, green on every host:
+**Test coverage** — 521 tests in the standard matrix, plus a 20-test instrumented suite, green
+on every host:
 
-| Module | JVM | Android host | iOS simulator |
-|---|---:|---:|---:|
-| `:cache-core` | 120 | 120 | 120 |
-| `:cache-storage` | 66 | — | — |
-| `:cache-store-room` | 23 | 11 | 20 |
-| `:cache-android` | — | 35 | — |
+| Module | JVM | Android host | iOS simulator | Android device |
+|---|---:|---:|---:|---:|
+| `:cache-core` | 120 | 120 | 120 | — |
+| `:cache-storage` | 66 | — | — | — |
+| `:cache-store-room` | 23 | 11 | 20 | 20 |
+| `:cache-android` | — | 41 | — | — |
 
 `:cache-core` runs one set of `commonTest` sources on all three hosts, so its count is identical
-by construction. `:cache-store-room` has a single shared contract with thin per-platform
-subclasses supplying only a factory.
+by construction. `:cache-store-room` has a single shared contract (`RoomStorageEngineTestBase`)
+with thin per-platform subclasses supplying only a factory, so the device suite runs the same
+contract as the host and iOS ones.
 
 **Known gaps, stated plainly:**
 
 - The **Android public API is not covered by binary-compatibility validation.** BCV hooks a
   KMP Android target only when its compilation is named `release`, while the AGP KMP plugin
-  names it `main`, so `:cache-android` publishes an AAR with no golden API file. The gap is
-  mitigated by tests, not closed.
-- `RoomStorageEngineFactory.createFromContext` is not exercised at runtime in a host test:
-  the bundled SQLite driver ships a JNI library built for Android ABIs and cannot load in a
-  host JVM test. It is covered by compilation, by the published AAR and by the sample app.
+  names it `main` (checked up to BCV 0.18.1), so `:cache-android` publishes an AAR with no
+  golden API file. The gap is mitigated by a reflection-based `PublicApiTest` that pins the
+  public surface, not closed.
+- `createFromContext` — the Room factory consumers actually call — is covered on a real
+  device by `RoomStorageEngineAndroidDeviceTest`, which loads the bundled SQLite driver for
+  real. The host suite cannot do that: the driver's JNI library is built for Android ABIs.
 - **Schema version 2 is a breaking change for an existing Room database.** `:cache-store-room`
   went from schema 1 to 2 to add `last_accessed_at`. A migration is provided and wired into every
   factory, so existing rows are carried forward and backfilled from `created_at` — they rank by
