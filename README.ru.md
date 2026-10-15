@@ -221,7 +221,6 @@ enum class CacheOrigin {
 sealed class KacheException : Exception {
     class NetworkException(cause)          // fetcher не отработал
     class CacheMissException(message)      // ничего нет и fetcher не передан
-    class ExpiredException(key)            // запись просрочена
     class DiskReadException(cause)
     class DiskWriteException(cause)
     class SerializationException(cause)

@@ -125,12 +125,6 @@ public final class io/github/slavikjunior/kache/core/KacheException$DiskWriteExc
 	public fun getCause ()Ljava/lang/Throwable;
 }
 
-public final class io/github/slavikjunior/kache/core/KacheException$ExpiredException : io/github/slavikjunior/kache/core/KacheException {
-	public fun <init> (Ljava/lang/Object;)V
-	public final fun getKey ()Ljava/lang/Object;
-	public fun toString ()Ljava/lang/String;
-}
-
 public final class io/github/slavikjunior/kache/core/KacheException$NetworkException : io/github/slavikjunior/kache/core/KacheException {
 	public fun <init> (Ljava/lang/Throwable;)V
 	public fun getCause ()Ljava/lang/Throwable;

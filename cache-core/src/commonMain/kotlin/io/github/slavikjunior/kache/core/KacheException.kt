@@ -18,13 +18,6 @@ public sealed class KacheException(
     /** Data serialization or deserialization failed. */
     public class SerializationException(override val cause: Throwable) : KacheException(cause = cause)
 
-    /** The cached entry expired before it could be used. */
-    public class ExpiredException(public val key: Any) : KacheException(
-        message = "Cache entry expired for key=$key",
-    ) {
-        override fun toString(): String = "ExpiredException(key=$key)"
-    }
-
     /** Cache miss - no data found in any tier and no fetcher provided. */
     public class CacheMissException(message: String) : KacheException(message = message)
 
