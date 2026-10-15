@@ -1,78 +1,260 @@
 #!/usr/bin/env python3
-"""Дописывает в gradle/verification-metadata.xml хеши артефактов, которые Android Studio
-запрашивает при sync, но которые `./gradlew --write-verification-metadata` не записывает.
+"""Дописывает в gradle/verification-metadata.xml checksum артефактов, которые Android Studio
+запрашивает при sync, а `--write-verification-metadata` не записал.
 
-Проблема: команда записывает только то, что реально скачал CLI-процесс. IDE при sync
-разрешает дополнительные артефакты, поэтому файл, сгенерированный из `check` и
-`assembleDebug`, оставляет IDE без возможности синхронизироваться:
+Что инструмент делает и чего не делает.
 
-    Dependency verification failed for configuration ':sample-android:detachedConfiguration2'
-    180 artifacts failed verification:
-      - kotlin-stdlib-2.4.20-sources.jar (org.jetbrains.kotlin:kotlin-stdlib:2.4.20) ...
-
-Два источника списка, оба читаются автоматически:
-  * HTML-отчёты `build/reports/dependency-verification/*/dependency-verification-report.html`,
-    которые Gradle пишет при каждой неудачной верификации. Это надёжнее лога IDE: лог
-    ротируется, и после перезапуска Studio блок с failed-артефактами из него исчезает,
-    хотя sync продолжает падать.
-  * `idea.log` — на случай, если отчёта нет.
-
-Файлы уже лежат в кэше Gradle (IDE скачал их до того, как верификация их отклонила),
-поэтому скрипт просто считает SHA-256 того, что есть на диске, и дописывает записи.
+* Список запросов берётся из данных Gradle: HTML-отчёты
+  `build/reports/dependency-verification/*/` (надёжнее, `idea.log` ротируется) и, при их
+  отсутствии, `idea.log`. Каждая строка — пара (имя файла, group:name:version) как её
+  назвал сам Gradle. Имя файла инструмент не выводит из имени модуля: у AndroidX KMP
+  платформенный модуль `animation-android` публикует `animation-1.12.1-samples-sources.jar`.
+* Файл ищется только в каталоге точного модуля из отчёта. Поиска по всему кэшу нет.
+* Checksum записывается, только если его подтверждает Gradle Module Metadata (`.module`)
+  того же модуля: там для каждого файла указан `sha256`. Файл без такой записи (обычно
+  Maven-only модуль) не записывается: его checksum может дать только Gradle при реальном
+  скачивании, поэтому нужна задача `recordIdeIndexingArtifacts` из build.gradle.kts.
+* Несовпадение checksum файла в кэше с `sha256` из `.module` — остановка: ничего не пишется.
+* Бинарные варианты (`-all.jar`, `-gradle813.jar` и т.п.) не добавляются, если их не
+  запросил сам Gradle. Угадывания классификаторов больше нет.
+* Файл редактируется текстовыми вставками: существующие строки не переформатируются.
 
 Использование:
     python3 tools/add-ide-artifacts-verification.py
-    python3 tools/add-ide-artifacts-verification.py --log /path/to/idea.log
-    python3 tools/add-ide-artifacts-verification.py --report /path/to/report.html
+    python3 tools/add-ide-artifacts-verification.py --report path/to/report.html
+    python3 tools/add-ide-artifacts-verification.py --log path/to/idea.log
 
-После запуска обязательно проверьте результат с обновлением кэша:
-    ./gradlew --dependency-verification=strict --refresh-dependencies check
+Коды возврата: 0 — всё записано или уже было; 1 — есть запросы, которые нельзя записать
+(нет в кэше или нет подтверждения); 2 — checksum не совпал, файл не изменён.
 """
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import glob
 import hashlib
 import html
+import json
 import os
 import re
 import sys
-import xml.etree.ElementTree as ET
 
-NS = "https://schema.gradle.org/dependency-verification"
 DEFAULT_META = "gradle/verification-metadata.xml"
 DEFAULT_REPORTS = "build/reports/dependency-verification/*/dependency-verification-report.html"
 DEFAULT_CACHE = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1")
+ORIGIN = "Gradle Module Metadata"
+FILE_EXTENSIONS = r"(?:jar|aar|zip|klib|pom|module)"
 
-# Где Android Studio пишет idea.log: (база, префикс версии, путь до лога внутри версии).
-LOG_LOCATIONS = [
-    ("~/Library/Logs/Google", "AndroidStudio", "idea.log"),
-    ("~/.cache/Google", "AndroidStudio", "log/idea.log"),
-    ("~/Library/Caches/Google", "AndroidStudio", "log/idea.log"),
-    ("%LOCALAPPDATA%/Google", "AndroidStudio", "log/idea.log"),
-]
+EXIT_OK, EXIT_SKIPPED, EXIT_MISMATCH = 0, 1, 2
 
 
-def find_ide_log() -> str | None:
-    """Ищет самый свежий idea.log среди установленных версий Android Studio.
+@dataclasses.dataclass(frozen=True)
+class Request:
+    """Запрос Gradle: какой файл, из какого модуля."""
 
-    База и префикс версии хранятся раздельно намеренно: подставлять ``*`` прямо в путь и
-    брать ``dirname`` нельзя — dirname вычислится по шаблону и даст каталог с ``*`` внутри.
-    """
-    found: list[tuple[float, str]] = []
-    for template, version_prefix, relative in LOG_LOCATIONS:
-        base = os.path.expandvars(os.path.expanduser(template))
-        if not os.path.isdir(base):
-            continue
-        for name in os.listdir(base):
-            if not name.startswith(version_prefix):
-                continue
-            candidate = os.path.join(base, name, relative)
-            if os.path.isfile(candidate):
-                found.append((os.path.getmtime(candidate), candidate))
-    if not found:
+    filename: str
+    group: str
+    name: str
+    version: str
+
+    @property
+    def coords(self) -> str:
+        return f"{self.group}:{self.name}:{self.version}"
+
+
+@dataclasses.dataclass
+class Summary:
+    added: list[Request] = dataclasses.field(default_factory=list)
+    already: list[Request] = dataclasses.field(default_factory=list)
+    missing_in_cache: list[Request] = dataclasses.field(default_factory=list)
+    unverifiable: list[Request] = dataclasses.field(default_factory=list)
+    no_descriptor: list[Request] = dataclasses.field(default_factory=list)
+    mismatched: list[tuple[Request, str, str]] = dataclasses.field(default_factory=list)
+
+
+def parse_coords(text: str) -> tuple[str, str, str] | None:
+    parts = text.split(":")
+    if len(parts) != 3 or not all(parts):
         return None
-    return max(found)[1]
+    return parts[0], parts[1], parts[2]
+
+
+def parse_log(text: str) -> set[Request]:
+    """Блоки `N artifacts failed verification:` из idea.log, по одному на неудачный sync."""
+    requests: set[Request] = set()
+    block = re.compile(r"\d+ artifacts failed verification:\n((?:\s+- .*\n)+)")
+    line = re.compile(rf"-\s+(\S+\.{FILE_EXTENSIONS})\s+\(([^)]+)\)")
+    for match in block.finditer(text):
+        for entry in line.finditer(match.group(1)):
+            coords = parse_coords(entry.group(2))
+            if coords:
+                requests.add(Request(entry.group(1), *coords))
+    return requests
+
+
+def parse_report(text: str) -> set[Request]:
+    """Строки HTML-отчёта Gradle с проблемой «Checksums are missing».
+
+    Несовпадение checksum («mismatch») здесь намеренно не разбирается: такой файл нельзя
+    «починить» записью нового хеша, это разбор причины, а не запрос на запись.
+    """
+    requests: set[Request] = set()
+    for row in re.findall(r"<tr>(.*?)</tr>", text, re.DOTALL):
+        if "Checksums are missing" not in row:
+            continue
+        coords_match = re.search(r"<td[^>]*>\s*([\w.\-]+:[\w.\-]+:[\w.\-]+)\s*</td>", row)
+        file_match = re.search(rf'<a href="[^"]*">([\w.\-+]+\.{FILE_EXTENSIONS})</a>', row)
+        if not coords_match or not file_match:
+            continue
+        coords = parse_coords(coords_match.group(1))
+        if coords:
+            requests.add(Request(file_match.group(1), *coords))
+    return requests
+
+
+def module_dir(cache: str, request: Request) -> str:
+    return os.path.join(cache, request.group, request.name, request.version)
+
+
+def locate(cache: str, request: Request) -> str | None:
+    """Файл только внутри каталога точного модуля (каталог хеша — один уровень)."""
+    for path in glob.glob(os.path.join(module_dir(cache, request), "*", request.filename)):
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def module_checksums(cache: str, request: Request) -> dict[str, str] | None:
+    """Карта `имя файла -> sha256` из Gradle Module Metadata модуля, либо None.
+
+    None — модуль не имеет `.module` в кэше. Пустая карта или отсутствие имени в ней
+    тоже означают «подтверждения нет».
+    """
+    modules = glob.glob(
+        os.path.join(module_dir(cache, request), "*", f"{request.name}-{request.version}.module")
+    )
+    if not modules:
+        return None
+    checksums: dict[str, str] = {}
+    for path in modules:
+        with open(path, encoding="utf-8") as handle:
+            metadata = json.load(handle)
+        for variant in metadata.get("variants", []):
+            for entry in variant.get("files", []):
+                name, sha = entry.get("name"), entry.get("sha256")
+                if not name or not sha:
+                    continue
+                if checksums.get(name, sha) != sha:
+                    raise ValueError(f"В .module противоречивые sha256 для {name}")
+                checksums[name] = sha
+    return checksums
+
+
+def sha256_of(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+COMPONENT_OPEN = re.compile(
+    r'^(?P<indent>\s*)<component group="(?P<g>[^"]+)" name="(?P<n>[^"]+)" version="(?P<v>[^"]+)">\s*$'
+)
+COMPONENT_ONE_LINE = re.compile(r"^\s*<component .*</component>\s*$")
+ARTIFACT_OPEN = re.compile(r'^\s*<artifact name="([^"]+)">\s*$')
+
+
+def _component_blocks(lines: list[str]):
+    """Yields (start, end, key) for each component block; end is the closing-tag index."""
+    index = 0
+    while index < len(lines):
+        match = COMPONENT_OPEN.match(lines[index])
+        if match:
+            end = index + 1
+            while end < len(lines) and lines[end].strip() != "</component>":
+                end += 1
+            if end >= len(lines):
+                raise ValueError(f"Не закрыт <component> в строке {index + 1}")
+            key = (match.group("g"), match.group("n"), match.group("v"))
+            yield index, end, key, match.group("indent")
+            index = end + 1
+        else:
+            if COMPONENT_ONE_LINE.match(lines[index]):
+                raise ValueError(
+                    f"Компонента в одну строку (строка {index + 1}): формат не поддерживается, "
+                    "перегенерируйте файл через --write-verification-metadata."
+                )
+            index += 1
+
+
+def is_descriptor(name: str, request: Request) -> bool:
+    """Дескриптор модуля: `<name>-<version>.module` или `.pom` этого же модуля."""
+    return name in {f"{request.name}-{request.version}.module", f"{request.name}-{request.version}.pom"}
+
+
+def recorded_names(lines: list[str], start: int, end: int) -> set[str]:
+    return {m.group(1) for line in lines[start:end] if (m := ARTIFACT_OPEN.match(line))}
+
+
+def artifact_lines(indent: str, filename: str, sha: str) -> list[str]:
+    inner = indent + "   "
+    return [
+        f'{indent}<artifact name="{filename}">',
+        f'{inner}<sha256 value="{sha}" origin="{ORIGIN}"/>',
+        f"{indent}</artifact>",
+    ]
+
+
+def insert_artifact(lines: list[str], request: Request, sha: str) -> list[str]:
+    """Вставляет артефакт в уже существующую компоненту текстом, не трогая остальные строки.
+
+    Компоненты без дескриптора сюда не доходят (см. plan), поэтому создание новой компоненты
+    намеренно не реализовано: её формирует Gradle.
+    """
+    key = (request.group, request.name, request.version)
+    for start, end, component_key, indent in _component_blocks(lines):
+        if component_key == key:
+            return lines[:end] + artifact_lines(indent + "   ", request.filename, sha) + lines[end:]
+    raise KeyError(f"Компоненты {request.coords} нет в metadata: запись невозможна")
+
+
+def plan(requests: set[Request], cache: str, lines: list[str]) -> tuple[Summary, list[tuple[Request, str]]]:
+    """Решает, что делать с каждым запросом, не меняя файл."""
+    summary = Summary()
+    to_insert: list[tuple[Request, str]] = []
+    existing = {}
+    for start, end, key, _indent in _component_blocks(lines):
+        existing[key] = recorded_names(lines, start, end)
+
+    for request in sorted(requests, key=lambda r: (r.group, r.name, r.version, r.filename)):
+        names = existing.get((request.group, request.name, request.version), set())
+        if request.filename in names:
+            summary.already.append(request)
+            continue
+        # Gradle при резолве документации сначала проверяет дескриптор модуля (.module/.pom).
+        # Записать sources без него — получить падение верификации на дескрипторе, а не на
+        # исходниках. Дескриптор сам инструмент записать не может (у него нет источника
+        # подтверждения), поэтому такие запросы отдаём Gradle целиком.
+        if not any(is_descriptor(n, request) for n in names):
+            summary.no_descriptor.append(request)
+            continue
+        path = locate(cache, request)
+        if path is None:
+            summary.missing_in_cache.append(request)
+            continue
+        checksums = module_checksums(cache, request)
+        if not checksums or request.filename not in checksums:
+            summary.unverifiable.append(request)
+            continue
+        actual = sha256_of(path)
+        expected = checksums[request.filename]
+        if actual != expected:
+            summary.mismatched.append((request, expected, actual))
+            continue
+        to_insert.append((request, actual))
+        summary.added.append(request)
+    return summary, to_insert
 
 
 def read(path: str) -> str:
@@ -80,217 +262,84 @@ def read(path: str) -> str:
         return handle.read()
 
 
-def parse_log(text: str) -> set[tuple[str, str]]:
-    """Достаёт из idea.log пары (имя файла, group:name:version).
-
-    Лог накапливается за всю сессию, поэтому в нём может быть несколько блоков
-    «N artifacts failed verification» — по одному на неудачный sync. Берём все:
-    первый блок давно закрытого прогона не должен перекрывать свежий.
-    """
-    pairs = set()
-    for _, block in re.findall(r"(\d+) artifacts failed verification:\n((?:\s+- .*\n)+)", text):
-        for line in block.strip().split("\n"):
-            filename = re.search(r"-\s+(\S+\.(?:jar|zip|klib))", line)
-            coords = re.search(r"\(([^)]+:[^)]+)\)", line)
-            if filename and coords:
-                pairs.add((filename.group(1), coords.group(1)))
-    return pairs
+def find_ide_log() -> str | None:
+    """Самый свежий idea.log среди установленных версий Android Studio (macOS и Linux)."""
+    candidates = glob.glob(os.path.expanduser("~/Library/Logs/Google/AndroidStudio*/idea.log"))
+    candidates += glob.glob(os.path.expanduser("~/.cache/Google/AndroidStudio*/log/idea.log"))
+    candidates = [path for path in candidates if os.path.isfile(path)]
+    return max(candidates, key=os.path.getmtime) if candidates else None
 
 
-def parse_report(text: str) -> set[tuple[str, str]]:
-    """Достаёт те же пары из HTML-отчёта Gradle.
-
-    Строка отчёта — это ``<td>group:name:version</td>`` рядом со ссылкой на файл, а
-    проблема лежит в третьей ячейке. Берём только ``Checksums are missing``: несовпадение
-    хеша — это уже другая история, такой файл нельзя молча «зачинить», генерируя метаданные.
-    """
-    row = re.compile(r"<tr>(.*?)</tr>", re.DOTALL)
-    pairs = set()
-    for block in row.findall(text):
-        if "Checksums are missing" not in block:
-            continue
-        coords = re.search(r"<td[^>]*>\s*([\w.\-]+:[\w.\-]+:[\w.\-]+)\s*</td>", block)
-        filename = re.search(r'<a href="[^"]*">([\w.\-+]+\.(?:jar|zip|klib))</a>', block)
-        if coords and filename:
-            pairs.add((filename.group(1), coords.group(1)))
-    return pairs
-
-
-def locate(cache: str, filename: str, coords: str) -> str | None:
-    group, name, version = coords.split(":")
-    base = os.path.join(cache, group, name, version)
-    if not os.path.isdir(base):
-        return None
-    for root, _dirs, files in os.walk(base):
-        if filename in files:
-            return os.path.join(root, filename)
-    return None
-
-
-def digest(path: str) -> str:
-    sha = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            sha.update(chunk)
-    return sha.hexdigest()
-
-
-def indexable_variants(components: dict, cache: str) -> set[tuple[str, str]]:
-    """Находит варианты модуля, которые IDE скачивает для индексации, но их нет в файле.
-
-    Перебор classifier'ов здесь не работает: их уже было три волны подряд — ``sources``,
-    ``javadoc`` и ``-common-sources`` у KMP-модулей, — и список пришлось бы продлевать
-    после каждой. Вместо этого берём всё, что Gradle уже положил в кэш для компоненты,
-    и оставляем только варианты с исходниками или документацией: именно их IDE тянет
-    для индексов, и именно они роняли sync. Бинарные варианты (``.jar``, ``-all.jar``,
-    ``-gradle813.jar``) сюда не попадают — их сборка и не запрашивает.
-    """
-    pairs = set()
-    for (group, name, version), component in components.items():
-        recorded = {a.get("name") for a in component.iter(f"{{{NS}}}artifact") if a.get("name")}
-        base = os.path.join(cache, group, name, version)
-        if not os.path.isdir(base):
-            continue
-        prefix = f"{name}-{version}"
-        for directory, _dirs, files in os.walk(base):
-            for filename in files:
-                if not filename.startswith(prefix) or not filename.endswith((".jar", ".klib")):
-                    continue
-                classifier = filename[len(prefix):]
-                if not ("sources" in classifier or "javadoc" in classifier):
-                    continue
-                if filename not in recorded:
-                    pairs.add((filename, f"{group}:{name}:{version}"))
-    return pairs
-
-
-def record(components: dict, components_tag: ET.Element, filename: str, coords: str, cache: str) -> str:
-    """Дописывает артефакт в его компоненту, создавая компоненту при необходимости.
-
-    Возвращает ``added``, ``already`` или ``missing``: файла может не быть в кэше,
-    и тогда запись пропускается, а вызывающий код решает, что с этим делать.
-    """
-    group, name, version = coords.split(":")
-    component = components.get((group, name, version))
-    if component is None:
-        # Обязательно внутри <components>: Gradle отвергает <component> в корне файла.
-        component = ET.SubElement(components_tag, f"{{{NS}}}component",
-                                  {"group": group, "name": name, "version": version})
-        components[(group, name, version)] = component
-    if any(a.get("name") == filename for a in component.iter(f"{{{NS}}}artifact")):
-        return "already"
-    path = locate(cache, filename, coords)
-    if path is None:
-        return "missing"
-    artifact = ET.SubElement(component, f"{{{NS}}}artifact", {"name": filename})
-    ET.SubElement(artifact, f"{{{NS}}}sha256",
-                  {"value": digest(path), "origin": "Generated by Gradle"})
-    return "added"
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--log", help="путь к idea.log (по умолчанию ищется сама)")
-    parser.add_argument("--report", action="append", default=[],
-                        help="HTML-отчёт Gradle; можно указать несколько раз")
-    parser.add_argument("--reports", default=DEFAULT_REPORTS,
-                        help="glob для отчётов, если --report не задан")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--log", help="путь к idea.log (по умолчанию ищется сам)")
+    parser.add_argument("--report", action="append", default=[], help="HTML-отчёт Gradle; можно несколько")
+    parser.add_argument("--reports", default=DEFAULT_REPORTS, help="glob отчётов, если --report не задан")
     parser.add_argument("--metadata", default=DEFAULT_META)
     parser.add_argument("--cache", default=DEFAULT_CACHE)
     parser.add_argument("--artifact", action="append", default=[],
-                        help="ручная запись group:name:version:filename")
-    parser.add_argument("--close-gaps", action="store_true",
-                        help="дописать варианты с исходниками и документацией, которые лежат в кэше, но не записаны")
-    args = parser.parse_args()
+                        help="вручную: group:name:version:filename")
+    args = parser.parse_args(argv)
 
     if not os.path.isfile(args.metadata):
-        sys.exit(f"{args.metadata} не найден — он в корне репозитория.")
+        print(f"{args.metadata} не найден: запускайте из корня репозитория.", file=sys.stderr)
+        return EXIT_SKIPPED
 
-    wanted: set[tuple[str, str]] = set()
-    sources = list(args.report) or sorted(glob.glob(args.reports))
-    for path in sources:
-        if not os.path.isfile(path):
-            print(f"отчёт не найден, пропускаю: {path}")
-            continue
-        found = parse_report(html.unescape(read(path)))
-        print(f"отчёт {path}: {len(found)} непроверенных артефактов")
-        wanted |= found
+    requests: set[Request] = set()
+    report_paths = args.report or sorted(glob.glob(args.reports))
+    for path in report_paths:
+        found = parse_report(read(path))
+        print(f"отчёт {path}: {len(found)} запросов")
+        requests |= found
 
     log_path = args.log or find_ide_log()
     if log_path and os.path.isfile(log_path):
         found = parse_log(read(log_path))
-        print(f"лог {log_path}: {len(found)} непроверенных артефактов")
-        wanted |= found
+        print(f"лог {log_path}: {len(found)} запросов")
+        requests |= found
 
     for item in args.artifact:
-        coords, _, filename = item.partition(":javadoc@")
-        if not filename:
-            coords, _, filename = item.rpartition(":")
+        head, _, filename = item.rpartition(":")
+        coords = parse_coords(head)
         if not coords or not filename:
-            sys.exit(f"--artifact ожидает group:name:version:filename, получено {item!r}")
-        wanted.add((filename, coords))
+            print(f"--artifact ожидает group:name:version:filename, получено {item!r}", file=sys.stderr)
+            return EXIT_SKIPPED
+        requests.add(Request(filename, *coords))
 
-    ET.register_namespace("", NS)
-    tree = ET.parse(args.metadata)
-    root = tree.getroot()
+    if not requests:
+        print("Запросов от Gradle/IDE не найдено: sync, вероятно, уже проходит.")
+        return EXIT_OK
 
-    components_tag = root.find(f"{{{NS}}}components")
-    if components_tag is None:
-        sys.exit("В файле нет тега <components>.")
+    lines = read(args.metadata).split("\n")
+    summary, to_insert = plan(requests, args.cache, lines)
 
-    components = {
-        (c.get("group"), c.get("name"), c.get("version")): c
-        for c in components_tag.findall(f"{{{NS}}}component")
-    }
+    for request, expected, actual in summary.mismatched:
+        print(f"ОТКАЗ: checksum не совпал: {request.filename} ({request.coords})\n"
+              f"  .module: {expected}\n  файл:    {actual}", file=sys.stderr)
+    if summary.mismatched:
+        print("Ничего не записано: разберитесь с расхождением до повторного запуска.", file=sys.stderr)
+        return EXIT_MISMATCH
 
-    if args.close_gaps:
-        speculative = indexable_variants(components, args.cache) - wanted
-    else:
-        speculative = set()
+    if to_insert:
+        for request, sha in to_insert:
+            lines = insert_artifact(lines, request, sha)
+        with open(args.metadata, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write("\n".join(lines))
 
-    if not wanted and not speculative:
-        print("Непроверенных артефактов не найдено: sync, вероятно, уже проходит.")
-        return 0
-
-    added, already, missing, skipped = 0, 0, [], 0
-    for filename, coords in sorted(wanted):
-        outcome = record(components, components_tag, filename, coords, args.cache)
-        if outcome == "added":
-            added += 1
-        elif outcome == "already":
-            already += 1
-        else:
-            missing.append(f"{filename} ({coords})")
-
-    # Парные варианты добавляем только из кэша: то, чего IDE ни разу не качала, хешировать
-    # нечем, и отсутствие такого артефакта в metadata — не проблема.
-    for filename, coords in sorted(speculative):
-        outcome = record(components, components_tag, filename, coords, args.cache)
-        if outcome == "added":
-            added += 1
-        elif outcome == "missing":
-            skipped += 1
-
-    # Файл должен остаться в том же виде, в котором его пишет сам Gradle, иначе каждый
-    # следующий прогон даёт diff из-за форматирования, а не из-за новых записей.
-    # Именно здесь, а не до добавления: отступ ставится к уже готовому дереву, иначе
-    # свежие <artifact> снова оказываются слитыми с </component> в одну строку.
-    ET.indent(tree, space="   ")
-
-    # ElementTree не ставит завершающий перевод строки, а Gradle ставит.
-    with open(args.metadata, "wb") as handle:
-        tree.write(handle, encoding="UTF-8", xml_declaration=True)
-        handle.write(b"\n")
-    print(f"добавлено: {added}, уже было: {already}, не найдено в кэше: {len(missing)}"
-          + (f", парных вариантов пропущено: {skipped}" if speculative else ""))
-    for item in missing:
-        print("  -", item)
-    if missing:
-        print("\nЭти артефакты нужно скачать вручную, иначе sync продолжит падать.")
-        return 1
-    print("\nПроверьте результат с обновлением кэша:")
-    print("  ./gradlew --dependency-verification=strict --refresh-dependencies check")
-    return 0
+    print(f"добавлено: {len(summary.added)}, уже было: {len(summary.already)}, "
+          f"нет в кэше: {len(summary.missing_in_cache)}, без подтверждения: {len(summary.unverifiable)}, "
+          f"без дескриптора модуля: {len(summary.no_descriptor)}")
+    for request in summary.missing_in_cache:
+        print(f"  - нет в кэше: {request.filename} ({request.coords})")
+    for request in summary.unverifiable:
+        print(f"  - нет подтверждения (.module/sha256): {request.filename} ({request.coords})")
+    for request in summary.no_descriptor:
+        print(f"  - нет дескриптора модуля в metadata: {request.filename} ({request.coords})")
+    if summary.missing_in_cache or summary.unverifiable or summary.no_descriptor:
+        print("Такие артефакты запишет Gradle: ./gradlew --write-verification-metadata sha256 "
+              "recordIdeIndexingArtifacts")
+        return EXIT_SKIPPED
+    return EXIT_OK
 
 
 if __name__ == "__main__":
