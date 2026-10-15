@@ -145,4 +145,36 @@ class StorageRecordFileCodecTest {
             StorageRecordFileCodec.decode("v2|1|0|1|999|short".encodeToByteArray())
         }
     }
+
+    @Test
+    fun aDeclaredLengthThatOverflowsAnIntIsRejectedRatherThanTruncated() {
+        // 2^32 narrows to zero. Read the way it was before, that passes every bound check
+        // and decodes as a silently empty payload — a record that claims data and yields none,
+        // which is the worst outcome available here.
+        assertFailsWith<IllegalArgumentException> {
+            StorageRecordFileCodec.decode("v2|1|0|1|4294967296|short".encodeToByteArray())
+        }
+    }
+
+    @Test
+    fun aDeclaredLengthNearTheTopOfTheRangeIsRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            StorageRecordFileCodec.decode("v2|1|0|1|9223372036854775807|short".encodeToByteArray())
+        }
+    }
+
+    @Test
+    fun aNegativeDeclaredLengthIsRejected() {
+        assertFailsWith<IllegalArgumentException> {
+            StorageRecordFileCodec.decode("v2|1|0|1|-1|short".encodeToByteArray())
+        }
+    }
+
+    @Test
+    fun aLegacyRecordWithAnOverflowingDeclaredLengthIsRejected() {
+        // The old layout has no version marker, so the same narrowing applies one field earlier.
+        assertFailsWith<IllegalArgumentException> {
+            StorageRecordFileCodec.decode("1|0|4294967296|short".encodeToByteArray())
+        }
+    }
 }
