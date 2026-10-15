@@ -27,8 +27,10 @@ internal class StorageTier<K : Any, V : Any>(
     /**
      * Reads a value from storage.
      *
-     * A record that fails to decode is removed, since leaving it in place would make
-     * every subsequent read fail the same way.
+     * A record that fails to decode is removed and reported as a miss. Cached bytes are
+     * untrusted input — whoever can write to the backend can plant garbage — so a payload the
+     * serializer rejects must not take the read down; dropping it also stops the next read
+     * from failing the same way.
      */
     override suspend fun read(key: K, allowStale: Boolean): TieredValue<V>? {
         val stringKey = keyToString(key)
@@ -46,9 +48,12 @@ internal class StorageTier<K : Any, V : Any>(
 
         val value = try {
             serializer.deserialize(record.data)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
+            // A decode failure is a property of the bytes, not of the caller, so the read
+            // reports a miss. Dropping the record is best-effort: a real write failure here
+            // still surfaces rather than being hidden behind the miss.
             storageEngine.remove(stringKey)
-            throw if (e is KacheException.SerializationException) e else KacheException.SerializationException(e)
+            return null
         }
 
         // Recorded after the value is known good, so a failed decode does not make a record

@@ -33,6 +33,20 @@ internal class FailingSerializer : KacheSerializer<String> {
 }
 
 /**
+ * Writes normally and refuses to decode, which is the shape of a payload corrupted on disk:
+ * the write succeeded, the read is what fails.
+ */
+internal class RejectingReadSerializer : KacheSerializer<String> {
+
+    private val delegate = StringSerializer()
+
+    override fun serialize(value: String): ByteArray = delegate.serialize(value)
+
+    override fun deserialize(bytes: ByteArray): String =
+        throw KacheException.SerializationException(IllegalStateException("deserialize failed"))
+}
+
+/**
  * In-memory [StorageEngine] used as the L2 tier in tests.
  *
  * Records are kept as serialized bytes only, like a real backend, so a test that writes

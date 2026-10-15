@@ -65,6 +65,43 @@ class L2KmpCacheTest {
     }
 
     @Test
+    fun aPayloadTheSerializerRejectsIsAMiss() = runTest {
+        // Writes normally and refuses to decode: the shape of a payload corrupted on disk, or
+        // planted there by someone else.
+        val cache = L2KmpCache<String, String>(
+            storageEngine = engine,
+            valueSerializer = RejectingReadSerializer(),
+            timeSource = time,
+        )
+        cache.put("k", "cached")
+        var fetcherCalls = 0
+
+        val result = cache.get("k", CacheStrategy.CacheFirst) {
+            fetcherCalls++
+            "fresh"
+        }.toList().last()
+
+        assertEquals(CacheResult.Success("fresh", CacheOrigin.NETWORK), result)
+        assertEquals(1, fetcherCalls, "a rejected payload must read as a miss, not a throw")
+    }
+
+    @Test
+    fun aRejectedPayloadIsDroppedSoTheNextReadDoesNotFailTheSameWay() = runTest {
+        val cache = L2KmpCache<String, String>(
+            storageEngine = engine,
+            valueSerializer = RejectingReadSerializer(),
+            timeSource = time,
+        )
+        cache.put("k", "cached")
+
+        val result = cache.get("k", CacheStrategy.CacheFirst, fetcher = null).toList().last()
+
+        val error = assertIs<CacheResult.Error<String>>(result)
+        assertIs<KacheException.CacheMissException>(error.error)
+        assertEquals(0L, engine.size(), "the rejected record must be dropped, not kept to fail again")
+    }
+
+    @Test
     fun missWithoutFetcherIsReportedAsACacheMiss() = runTest {
         val result = cache().get("k", CacheStrategy.CacheFirst, fetcher = null).toList().last()
 
