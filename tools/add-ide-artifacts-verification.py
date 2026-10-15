@@ -135,23 +135,32 @@ def digest(path: str) -> str:
     return sha.hexdigest()
 
 
-def counterpart_variants(components: dict) -> set[tuple[str, str]]:
-    """Достраивает парный вариант (sources <-> javadoc) для уже известных компонент.
+def indexable_variants(components: dict, cache: str) -> set[tuple[str, str]]:
+    """Находит варианты модуля, которые IDE скачивает для индексации, но их нет в файле.
 
-    IDE не запрашивает sources и javadoc одной волной: сначала прилетает один classifier,
-    следующий — только после того, как первый записан, и каждая волна роняет sync отдельно.
-    Для компонент, у которых хотя бы один из двух вариантов уже есть, имеет смысл дописать
-    второй сразу, если файл лежит в кэше Gradle.
+    Перебор classifier'ов здесь не работает: их уже было три волны подряд — ``sources``,
+    ``javadoc`` и ``-common-sources`` у KMP-модулей, — и список пришлось бы продлевать
+    после каждой. Вместо этого берём всё, что Gradle уже положил в кэш для компоненты,
+    и оставляем только варианты с исходниками или документацией: именно их IDE тянет
+    для индексов, и именно они роняли sync. Бинарные варианты (``.jar``, ``-all.jar``,
+    ``-gradle813.jar``) сюда не попадают — их сборка и не запрашивает.
     """
     pairs = set()
     for (group, name, version), component in components.items():
-        names = {a.get("name") for a in component.iter(f"{{{NS}}}artifact") if a.get("name")}
-        if not any(n.endswith(("-sources.jar", "-javadoc.jar")) for n in names):
+        recorded = {a.get("name") for a in component.iter(f"{{{NS}}}artifact") if a.get("name")}
+        base = os.path.join(cache, group, name, version)
+        if not os.path.isdir(base):
             continue
-        for suffix in ("-sources.jar", "-javadoc.jar"):
-            filename = f"{name}-{version}{suffix}"
-            if filename not in names:
-                pairs.add((filename, f"{group}:{name}:{version}"))
+        prefix = f"{name}-{version}"
+        for directory, _dirs, files in os.walk(base):
+            for filename in files:
+                if not filename.startswith(prefix) or not filename.endswith((".jar", ".klib")):
+                    continue
+                classifier = filename[len(prefix):]
+                if not ("sources" in classifier or "javadoc" in classifier):
+                    continue
+                if filename not in recorded:
+                    pairs.add((filename, f"{group}:{name}:{version}"))
     return pairs
 
 
@@ -191,7 +200,7 @@ def main() -> int:
     parser.add_argument("--artifact", action="append", default=[],
                         help="ручная запись group:name:version:filename")
     parser.add_argument("--close-gaps", action="store_true",
-                        help="дописать парный вариант (sources <-> javadoc) для уже известных компонент")
+                        help="дописать варианты с исходниками и документацией, которые лежат в кэше, но не записаны")
     args = parser.parse_args()
 
     if not os.path.isfile(args.metadata):
@@ -235,7 +244,7 @@ def main() -> int:
     }
 
     if args.close_gaps:
-        speculative = counterpart_variants(components) - wanted
+        speculative = indexable_variants(components, args.cache) - wanted
     else:
         speculative = set()
 

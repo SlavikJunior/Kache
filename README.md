@@ -691,9 +691,11 @@ python3 tools/add-ide-artifacts-verification.py
 ```
 
 Prefer the reports over the log: `idea.log` is rotated, and after a Studio restart the block
-listing the failed artifacts is gone while sync keeps failing. The IDE also asks for `sources`
-and `javadoc` in separate waves — fixing one does not fix the other — so `--close-gaps` records
-the counterpart variant for every component that already has one of the two:
+listing the failed artifacts is gone while sync keeps failing. The IDE also asks for its
+indexing artifacts in separate waves — `sources`, then `javadoc`, then the KMP-only
+`-common-sources` — so fixing one does not fix the next. `--close-gaps` records every
+sources/javadoc variant of an already-tracked module that sits in the Gradle cache, instead of
+waiting for the next failure:
 
 ```bash
 python3 tools/add-ide-artifacts-verification.py --close-gaps
