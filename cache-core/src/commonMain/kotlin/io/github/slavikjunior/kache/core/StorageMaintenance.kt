@@ -103,9 +103,15 @@ internal class StorageMaintenance(
         if (current < 0 || current <= limit) return
 
         var excess = current - limit
+        // `excess` is a Long because `StorageEngine.size()` is one. Casting it straight down
+        // truncates: at 2^32 over the limit it used to wrap to a request for zero candidates,
+        // which looks exactly like "nothing to evict" and leaves the cache over its limit
+        // with no way to notice. Clamped instead, so a backend is asked for as many as it
+        // can rank rather than for a nonsensical number.
+        val requested = excess.coerceAtMost(Int.MAX_VALUE.toLong() - 1).toInt() + 1
         val candidates = storageEngine.evictionCandidates(
             strategy = evictionStrategy,
-            limit = (excess + 1).toInt(),
+            limit = requested,
             now = timeSource.currentTimeMillis(),
         )
 
