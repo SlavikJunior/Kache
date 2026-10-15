@@ -286,15 +286,6 @@ sealed class io.github.slavikjunior.kache.core/KacheException : kotlin/Exception
             final fun <get-cause>(): kotlin/Throwable // io.github.slavikjunior.kache.core/KacheException.DiskWriteException.cause.<get-cause>|<get-cause>(){}[0]
     }
 
-    final class ExpiredException : io.github.slavikjunior.kache.core/KacheException { // io.github.slavikjunior.kache.core/KacheException.ExpiredException|null[0]
-        constructor <init>(kotlin/Any) // io.github.slavikjunior.kache.core/KacheException.ExpiredException.<init>|<init>(kotlin.Any){}[0]
-
-        final val key // io.github.slavikjunior.kache.core/KacheException.ExpiredException.key|{}key[0]
-            final fun <get-key>(): kotlin/Any // io.github.slavikjunior.kache.core/KacheException.ExpiredException.key.<get-key>|<get-key>(){}[0]
-
-        final fun toString(): kotlin/String // io.github.slavikjunior.kache.core/KacheException.ExpiredException.toString|toString(){}[0]
-    }
-
     final class NetworkException : io.github.slavikjunior.kache.core/KacheException { // io.github.slavikjunior.kache.core/KacheException.NetworkException|null[0]
         constructor <init>(kotlin/Throwable) // io.github.slavikjunior.kache.core/KacheException.NetworkException.<init>|<init>(kotlin.Throwable){}[0]
 

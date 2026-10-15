@@ -220,7 +220,6 @@ Everything the library throws is a `KacheException`, so one `catch` covers it:
 sealed class KacheException : Exception {
     class NetworkException(cause)          // the fetcher failed
     class CacheMissException(message)      // nothing cached and no fetcher
-    class ExpiredException(key)            // entry expired
     class DiskReadException(cause)
     class DiskWriteException(cause)
     class SerializationException(cause)
