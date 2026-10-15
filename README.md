@@ -681,24 +681,32 @@ Dependency verification failed for configuration ':cache-store-room:jvmCompileCl
   - asm-9.10.1-javadoc.jar (org.ow2.asm:asm:9.10.1) ...
 ```
 
-The artifacts exist in the Gradle cache, so the fix is to hash what is already there.
-`tools/add-ide-artifacts-verification.py` collects the failed list from Gradle's own HTML
-reports in `build/reports/dependency-verification/`, falls back to `idea.log`, computes the
-SHA-256 of each cached file and adds the entries:
+Do not hash the cache by hand, and do not guess file names: Gradle knows which documentation
+variant each module publishes, and it is the only party that can record a checksum it actually
+downloaded from a declared repository. The IDE's indexing requests are therefore served by a
+Gradle task that resolves the documentation variants of every component already in the file:
+
+```bash
+./gradlew --write-verification-metadata sha256 recordIdeIndexingArtifacts
+./gradlew --dependency-verification=strict recordIdeIndexingArtifacts   # проверка без записи
+```
+
+The task does not resolve transitive graphs: a documentation request for one module must not
+drag in unrelated binaries. It inspects only the attributes of the selected module variant, so
+a module that publishes no documentation is skipped rather than recorded as its main jar.
+
+`tools/add-ide-artifacts-verification.py` is an offline companion for when Gradle cannot run.
+It takes the requests Gradle itself made (HTML reports in `build/reports/dependency-verification/`,
+falling back to `idea.log`, which rotates), and it records a checksum only when the module's
+Gradle Module Metadata lists that file with a `sha256` and the cached file matches it. It never
+records a module's documentation without its `.module`/`.pom` descriptor being present already,
+because Gradle verifies the descriptor first and a missing one fails the build. Its exit codes:
+0 — nothing left to record; 1 — some requests need Gradle; 2 — a checksum did not match and nothing
+was written.
 
 ```bash
 python3 tools/add-ide-artifacts-verification.py
-```
-
-Prefer the reports over the log: `idea.log` is rotated, and after a Studio restart the block
-listing the failed artifacts is gone while sync keeps failing. The IDE also asks for its
-indexing artifacts in separate waves — `sources`, then `javadoc`, then the KMP-only
-`-common-sources` — so fixing one does not fix the next. `--close-gaps` records every
-sources/javadoc variant of an already-tracked module that sits in the Gradle cache, instead of
-waiting for the next failure:
-
-```bash
-python3 tools/add-ide-artifacts-verification.py --close-gaps
+python3 -m unittest discover -s tools/tests -v
 ```
 
 Regenerate the whole file after a dependency bump rather than patching it, and prove the result
