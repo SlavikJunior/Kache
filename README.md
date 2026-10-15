@@ -691,7 +691,13 @@ python3 tools/add-ide-artifacts-verification.py
 ```
 
 Prefer the reports over the log: `idea.log` is rotated, and after a Studio restart the block
-listing the failed artifacts is gone while sync keeps failing.
+listing the failed artifacts is gone while sync keeps failing. The IDE also asks for `sources`
+and `javadoc` in separate waves — fixing one does not fix the other — so `--close-gaps` records
+the counterpart variant for every component that already has one of the two:
+
+```bash
+python3 tools/add-ide-artifacts-verification.py --close-gaps
+```
 
 Regenerate the whole file after a dependency bump rather than patching it, and prove the result
 with `--refresh-dependencies` — without it, verification passes against the cache and proves
