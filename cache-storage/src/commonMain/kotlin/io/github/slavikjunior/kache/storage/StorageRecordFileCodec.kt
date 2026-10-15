@@ -80,7 +80,7 @@ internal object StorageRecordFileCodec {
 
             val ttlMillis = readField(bytes, pos).also { pos = it.second }
             val dataLength = readField(bytes, pos)
-            val data = readPayload(bytes, dataLength.second, dataLength.first.toInt())
+            val data = readPayload(bytes, dataLength.second, dataLength.first)
 
             StorageRecord(
                 value = data,
@@ -106,7 +106,7 @@ internal object StorageRecordFileCodec {
         pos = afterAccess
 
         val (declaredLength, afterLength) = readField(bytes, pos)
-        val data = readPayload(bytes, afterLength, declaredLength.toInt())
+        val data = readPayload(bytes, afterLength, declaredLength)
 
         return StorageRecord(
             value = data,
@@ -125,13 +125,23 @@ internal object StorageRecordFileCodec {
         return bytes.decodeToString(start, separator).toLong() to separator + 1
     }
 
-    private fun readPayload(bytes: ByteArray, start: Int, declaredLength: Int): ByteArray {
-        if (declaredLength < 0 || start + declaredLength > bytes.size) {
+    /**
+     * Reads [declaredLength] bytes of payload starting at [start].
+     *
+     * The declared length is validated as a Long and narrowed only once it is known to fit.
+     * Casting first is the whole bug: a header claiming 2^32 bytes narrows to zero and decodes
+     * as a silently empty payload instead of being refused, and `start + declaredLength`
+     * overflows to a negative offset that passes a bounds check written for the other sign.
+     */
+    private fun readPayload(bytes: ByteArray, start: Int, declaredLength: Long): ByteArray {
+        val available = bytes.size - start
+        if (declaredLength < 0 || declaredLength > available) {
             throw IllegalArgumentException(
-                "Invalid record format: declared data length $declaredLength does not fit in ${bytes.size - start} bytes"
+                "Invalid record format: declared data length $declaredLength does not fit in $available bytes"
             )
         }
-        return bytes.copyOfRange(start, start + declaredLength)
+        val length = declaredLength.toInt()
+        return bytes.copyOfRange(start, start + length)
     }
 
     /** `0` in the ttl slot means "no expiry"; anything else is a whole number of milliseconds. */
