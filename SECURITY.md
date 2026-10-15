@@ -7,8 +7,12 @@ most recent published line. Only that line is supported.
 
 | Version | Supported |
 |---|---|
-| 0.1.x | yes |
+| 0.1.x | yes, once published |
 | anything older | no |
+
+**No release has been published yet.** `0.1.0` exists only in a local repository, and every
+finding from the pre-release audit is already fixed on `main`. Reports against `main` are
+welcome and are treated as reports against the upcoming release.
 
 ## Reporting a vulnerability
 
@@ -34,6 +38,16 @@ A useful report includes:
 - A fix on `main`, a patch release, and a note in the release description. Credit in the
   advisory unless you prefer otherwise.
 
+## Supply chain
+
+Every dependency the build resolves is checked against a recorded SHA-256 in
+`gradle/verification-metadata.xml`. A dependency bump fails the build until the metadata is
+regenerated, which puts the new checksum in a diff a reviewer can see.
+
+These are checksums, not signatures. The project has no GPG key, so a published artifact
+whose bytes match a recorded hash would pass verification. Signing the release artifacts is on
+the list of remaining work before the first publication.
+
 ## Scope
 
 Kache is a cache. Three properties are deliberate design decisions rather than defects, and
@@ -45,7 +59,10 @@ are documented in the [security considerations](README.md#security-consideration
   own timestamps decide when it expires. The storage directory is treated as untrusted input:
   a record that cannot be parsed becomes a miss, not an error.
 - **Keys are stored, reversibly, in file names** in the file backend. Keys are identifiers,
-  not secrets.
+  not secrets. The encoding is reversible and collision-free, so distinct keys never share a
+  record — but a directory listing is enough to recover a key.
+- **Cache directories are writable by the application** and, on Android, may be purged at any
+  time. Losing the cache is expected behaviour, not data loss.
 
 Reports are still welcome if you believe one of these is exploitable in a way the
 documentation does not cover, or if the documentation overstates the protection.

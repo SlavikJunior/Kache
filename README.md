@@ -660,6 +660,39 @@ same `java.io` implementation; it was previously duplicated per platform.
 ./gradlew publishAllPublicationsToLocalRepository
 ```
 
+Every resolved dependency is checked against a recorded SHA-256 in
+`gradle/verification-metadata.xml`, so a dependency bump fails until the metadata is
+regenerated:
+
+```bash
+./gradlew --write-verification-metadata sha256 check
+./gradlew --dependency-verification=strict check
+```
+
+One caveat worth knowing before your first dependency bump: `--write-verification-metadata` only
+records what a CLI invocation actually downloads, and Android Studio downloads more than the
+CLI does. During sync the IDE resolves a detached configuration with the `sources` classifier to
+index dependency sources, so a metadata file generated purely from `check` and
+`assembleDebug` leaves the IDE unable to sync:
+
+```
+Dependency verification failed for configuration ':sample-android:detachedConfiguration2'
+180 artifacts failed verification:
+  - kotlin-stdlib-2.4.20-sources.jar (org.jetbrains.kotlin:kotlin-stdlib:2.4.20) ...
+```
+
+The sources artifacts exist in the Gradle cache, so the fix is to hash what is already there.
+`tools/add-ide-sources-verification.py` reads the failed list from the IDE log, computes the
+SHA-256 of each cached file and adds the entries:
+
+```bash
+python3 tools/add-ide-sources-verification.py
+```
+
+Regenerate the whole file after a dependency bump rather than patching it, and prove the result
+with `--refresh-dependencies` — without it, verification passes against the cache and proves
+nothing.
+
 iOS compilation and linking must be requested explicitly, because `./gradlew check` does not
 prove them — `iosX64Test` is disabled on Apple Silicon and `iosArm64Test` needs a physical
 device:
@@ -675,8 +708,10 @@ device:
 
 ## Project status
 
-`0.1.0`. All seven roadmap phases are implemented, plus capacity limits, eviction
-strategies and optional expired-record reaping.
+`0.1.0`. Nine roadmap phases are defined; eight are implemented and the ninth
+(observability) is deliberately not started. Capacity limits, eviction strategies and
+optional expired-record reaping shipped alongside them, and a thirteen-finding security audit
+is closed out (see `SECURITY.md` and the audit write-up).
 
 **Test coverage** — 515 tests, green on every host:
 
@@ -713,6 +748,14 @@ subclasses supplying only a factory.
   time — the same backfill the database migration performs — so records written by either layout
   rank identically until they are read again. A file from a *future* layout, or from a different
   format entirely, is discarded rather than guessed at, since a cache directory is disposable.
+- **An existing file cache is not read after an upgrade.** The security audit replaced the
+  key → filename mapping, because the old one was lossy and could not be inverted, so two
+  different keys could collide onto one record. Old files are neither read nor migrated; they
+  are dead weight in the cache directory until it is cleared. That is the correct trade for a
+  cache, but it is a one-way door.
+- **`KacheException.ExpiredException` was removed.** Nothing ever threw it, and it was the one
+  exception that put a caller-supplied key into `message` and `toString`. An expired record is
+  a miss, not an error. A consumer that caught it will not compile.
 - Not yet published to Maven Central. See `docs/` locally or the release notes for the
   remaining manual steps (namespace verification and the Portal User Token).
 

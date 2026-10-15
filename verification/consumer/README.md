@@ -49,6 +49,21 @@ The repository path defaults to `../../build/repo`. Override it with
 4. **Read strategies and failure handling** — a cold `CacheFirst` goes to the fetcher, the second
    read is served from disk without calling the fetcher again, an expired record is not served,
    and a corrupt file produces a miss rather than an exception.
+5. **Key properties** — distinct keys get distinct files and each returns its own value, the
+   keys `"."` and `".."` stay inside the cache directory, and a parent directory is left
+   untouched.
+
+   These exist because the unit tests cannot see them: traversal is a property of what the
+   filesystem does with the resolved path, so it needs a real one. This is the only check in
+   the harness that would have caught the lossy key encoding (F3) on an *upgrade* rather than
+   on a fresh directory — the two keys it distinguishes are the ones that used to collide.
+
+## Dependency verification
+
+The harness resolves from `build/repo`, so it inherits the root build's
+`gradle/verification-metadata.xml`: an artifact that is published but whose checksum was not
+recorded fails here first. That is the point of running it against a coordinate rather than
+against `project(...)` — the boundary is where packaging goes wrong.
 
 ## In CI
 
