@@ -22,3 +22,6 @@ verification/consumer/build/
 # Рабочие заметки и инструкции агента: не часть библиотеки
 /docs/
 /AGENTS.md
+
+# Python-кеш утилит в tools/
+__pycache__/

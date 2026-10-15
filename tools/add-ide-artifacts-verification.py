@@ -2,26 +2,28 @@
 """Дописывает в gradle/verification-metadata.xml хеши артефактов, которые Android Studio
 запрашивает при sync, но которые `./gradlew --write-verification-metadata` не записывает.
 
-Проблема: команда записывает только то, что реально скачал CLI-процесс. IDE при sync создаёт
-detached-конфигурацию с classifier "sources" (индексация исходников зависимостей), поэтому
-файл, сгенерированный из `check` и `assembleDebug`, оставляет IDE без возможности
-синхронизироваться:
+Проблема: команда записывает только то, что реально скачал CLI-процесс. IDE при sync
+разрешает дополнительные артефакты, поэтому файл, сгенерированный из `check` и
+`assembleDebug`, оставляет IDE без возможности синхронизироваться:
 
     Dependency verification failed for configuration ':sample-android:detachedConfiguration2'
     180 artifacts failed verification:
       - kotlin-stdlib-2.4.20-sources.jar (org.jetbrains.kotlin:kotlin-stdlib:2.4.20) ...
 
-Штатно эти артефакты в metadata не попадают: у native/klib-модулей sources не резолвятся
-через `<group>:<name>:<version>:sources@jar`, варианты плагинов с classifier
-(`-gradle96-sources.jar`) требуют другого координата, а sources дистрибутива Gradle не
-запрашивается ни одной задачей.
+Два источника списка, оба читаются автоматически:
+  * HTML-отчёты `build/reports/dependency-verification/*/dependency-verification-report.html`,
+    которые Gradle пишет при каждой неудачной верификации. Это надёжнее лога IDE: лог
+    ротируется, и после перезапуска Studio блок с failed-артефактами из него исчезает,
+    хотя sync продолжает падать.
+  * `idea.log` — на случай, если отчёта нет.
 
-Скрипт читает список непроверенных из лога IDE, находит каждый файл в кэше Gradle
-(все они уже скачаны — иначе IDE не дошёл бы до проверки) и дописывает SHA-256 содержимого.
+Файлы уже лежат в кэше Gradle (IDE скачал их до того, как верификация их отклонила),
+поэтому скрипт просто считает SHA-256 того, что есть на диске, и дописывает записи.
 
 Использование:
-    python3 tools/add-ide-sources-verification.py
-    python3 tools/add-ide-sources-verification.py --log /path/to/idea.log
+    python3 tools/add-ide-artifacts-verification.py
+    python3 tools/add-ide-artifacts-verification.py --log /path/to/idea.log
+    python3 tools/add-ide-artifacts-verification.py --report /path/to/report.html
 
 После запуска обязательно проверьте результат с обновлением кэша:
     ./gradlew --dependency-verification=strict --refresh-dependencies check
@@ -29,7 +31,9 @@ detached-конфигурацию с classifier "sources" (индексация 
 from __future__ import annotations
 
 import argparse
+import glob
 import hashlib
+import html
 import os
 import re
 import sys
@@ -37,6 +41,7 @@ import xml.etree.ElementTree as ET
 
 NS = "https://schema.gradle.org/dependency-verification"
 DEFAULT_META = "gradle/verification-metadata.xml"
+DEFAULT_REPORTS = "build/reports/dependency-verification/*/dependency-verification-report.html"
 DEFAULT_CACHE = os.path.expanduser("~/.gradle/caches/modules-2/files-2.1")
 
 # Где Android Studio пишет idea.log: (база, префикс версии, путь до лога внутри версии).
@@ -70,8 +75,13 @@ def find_ide_log() -> str | None:
     return max(found)[1]
 
 
-def parse_failed(text: str) -> list[tuple[str, str]]:
-    """Достаёт из лога пары (имя файла, group:name:version).
+def read(path: str) -> str:
+    with open(path, encoding="utf-8", errors="ignore") as handle:
+        return handle.read()
+
+
+def parse_log(text: str) -> set[tuple[str, str]]:
+    """Достаёт из idea.log пары (имя файла, group:name:version).
 
     Лог накапливается за всю сессию, поэтому в нём может быть несколько блоков
     «N artifacts failed verification» — по одному на неудачный sync. Берём все:
@@ -80,11 +90,30 @@ def parse_failed(text: str) -> list[tuple[str, str]]:
     pairs = set()
     for _, block in re.findall(r"(\d+) artifacts failed verification:\n((?:\s+- .*\n)+)", text):
         for line in block.strip().split("\n"):
-            filename = re.search(r"-\s+(\S+\.(?:jar|zip))", line)
+            filename = re.search(r"-\s+(\S+\.(?:jar|zip|klib))", line)
             coords = re.search(r"\(([^)]+:[^)]+)\)", line)
             if filename and coords:
                 pairs.add((filename.group(1), coords.group(1)))
-    return sorted(pairs)
+    return pairs
+
+
+def parse_report(text: str) -> set[tuple[str, str]]:
+    """Достаёт те же пары из HTML-отчёта Gradle.
+
+    Строка отчёта — это ``<td>group:name:version</td>`` рядом со ссылкой на файл, а
+    проблема лежит в третьей ячейке. Берём только ``Checksums are missing``: несовпадение
+    хеша — это уже другая история, такой файл нельзя молча «зачинить», генерируя метаданные.
+    """
+    row = re.compile(r"<tr>(.*?)</tr>", re.DOTALL)
+    pairs = set()
+    for block in row.findall(text):
+        if "Checksums are missing" not in block:
+            continue
+        coords = re.search(r"<td[^>]*>\s*([\w.\-]+:[\w.\-]+:[\w.\-]+)\s*</td>", block)
+        filename = re.search(r'<a href="[^"]*">([\w.\-+]+\.(?:jar|zip|klib))</a>', block)
+        if coords and filename:
+            pairs.add((filename.group(1), coords.group(1)))
+    return pairs
 
 
 def locate(cache: str, filename: str, coords: str) -> str | None:
@@ -109,24 +138,53 @@ def digest(path: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log", help="путь к idea.log (по умолчанию ищется сама)")
+    parser.add_argument("--report", action="append", default=[],
+                        help="HTML-отчёт Gradle; можно указать несколько раз")
+    parser.add_argument("--reports", default=DEFAULT_REPORTS,
+                        help="glob для отчётов, если --report не задан")
     parser.add_argument("--metadata", default=DEFAULT_META)
     parser.add_argument("--cache", default=DEFAULT_CACHE)
+    parser.add_argument("--artifact", action="append", default=[],
+                        help="ручная запись group:name:version:filename")
     args = parser.parse_args()
 
-    log_path = args.log or find_ide_log()
-    if not log_path or not os.path.isfile(log_path):
-        sys.exit("Лог Android Studio не найден. Синхронизируйте проект в IDE и повторите.")
     if not os.path.isfile(args.metadata):
         sys.exit(f"{args.metadata} не найден — он в корне репозитория.")
 
-    wanted = parse_failed(open(log_path, encoding="utf-8", errors="ignore").read())
+    wanted: set[tuple[str, str]] = set()
+    sources = list(args.report) or sorted(glob.glob(args.reports))
+    for path in sources:
+        if not os.path.isfile(path):
+            print(f"отчёт не найден, пропускаю: {path}")
+            continue
+        found = parse_report(html.unescape(read(path)))
+        print(f"отчёт {path}: {len(found)} непроверенных артефактов")
+        wanted |= found
+
+    log_path = args.log or find_ide_log()
+    if log_path and os.path.isfile(log_path):
+        found = parse_log(read(log_path))
+        print(f"лог {log_path}: {len(found)} непроверенных артефактов")
+        wanted |= found
+
+    for item in args.artifact:
+        coords, _, filename = item.partition(":javadoc@")
+        if not filename:
+            coords, _, filename = item.rpartition(":")
+        if not coords or not filename:
+            sys.exit(f"--artifact ожидает group:name:version:filename, получено {item!r}")
+        wanted.add((filename, coords))
+
     if not wanted:
-        print("В логе нет непроверенных артефактов: sync, вероятно, уже проходит.")
+        print("Непроверенных артефактов не найдено: sync, вероятно, уже проходит.")
         return 0
 
     ET.register_namespace("", NS)
     tree = ET.parse(args.metadata)
     root = tree.getroot()
+    # Файл должен остаться в том же виде, в котором его пишет сам Gradle, иначе каждый
+    # следующий прогрос даёт diff из-за форматирования, а не из-за новых записей.
+    ET.indent(tree, space="   ")
 
     components_tag = root.find(f"{{{NS}}}components")
     if components_tag is None:
@@ -138,7 +196,7 @@ def main() -> int:
     }
 
     added, already, missing = 0, 0, []
-    for filename, coords in wanted:
+    for filename, coords in sorted(wanted):
         group, name, version = coords.split(":")
         component = components.get((group, name, version))
         if component is None:
@@ -158,7 +216,10 @@ def main() -> int:
                       {"value": digest(path), "origin": "Generated by Gradle"})
         added += 1
 
-    tree.write(args.metadata, encoding="UTF-8", xml_declaration=True)
+    # ElementTree не ставит завершающий перевод строки, а Gradle ставит.
+    with open(args.metadata, "wb") as handle:
+        tree.write(handle, encoding="UTF-8", xml_declaration=True)
+        handle.write(b"\n")
     print(f"добавлено: {added}, уже было: {already}, не найдено в кэше: {len(missing)}")
     for item in missing:
         print("  -", item)
