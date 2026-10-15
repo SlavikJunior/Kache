@@ -202,3 +202,105 @@ tasks.register("recordIdeIndexingArtifacts") {
         )
     }
 }
+
+/**
+ * Проверяет состав локальной публикации, а не только факт её успеха.
+ *
+ * `publishAllPublicationsToLocalRepository` завершается успешно и при отсутствующем
+ * `-sources.jar`: Gradle не считает это ошибкой, а Maven Central считает. Поэтому после
+ * публикации разбирается сам репозиторий и валится, если у публикации нет POM, module-
+ * дескриптора, непустых sources/javadoc, а у android/native-вариантов — AAR/klib.
+ *
+ * Набор артефактов задан явно, а не выведен из имён: так пропавший вариант (например,
+ * `cache-core-iosx64`) — это ошибка, а не молчание. Новый таргет обязан быть добавлен
+ * сюда вместе с публикацией.
+ */
+val expectedPublishedArtifacts: Map<String, String?> = linkedMapOf(
+    // Корневые metadata-модули: у них нет ни AAR, ни klib.
+    "cache-core" to null,
+    "cache-core-jvm" to null,
+    "cache-core-android" to "aar",
+    "cache-core-iosarm64" to "klib",
+    "cache-core-iossimulatorarm64" to "klib",
+    "cache-core-iosx64" to "klib",
+    "cache-storage" to null,
+    "cache-storage-jvm" to null,
+    "cache-storage-android" to "aar",
+    "cache-store-room" to null,
+    "cache-store-room-jvm" to null,
+    "cache-store-room-android" to "aar",
+    "cache-store-room-iosarm64" to "klib",
+    "cache-store-room-iossimulatorarm64" to "klib",
+    // android-only KMP-модуль: metadata-модуль назван `cache-android`, android-вариант —
+    // `cache-android-android`, поэтому правило «имя оканчивается на -android» здесь не
+    // работает и вариант назван явно.
+    "cache-android" to null,
+    "cache-android-android" to "aar",
+)
+
+val verifyLocalPublication by tasks.registering {
+    group = "verification"
+    description = "Проверяет, что каждая локальная публикация полна (pom, module, sources, javadoc, aar/klib)."
+
+    dependsOn(
+        ":cache-core:publishAllPublicationsToLocalRepository",
+        ":cache-storage:publishAllPublicationsToLocalRepository",
+        ":cache-store-room:publishAllPublicationsToLocalRepository",
+        ":cache-android:publishAllPublicationsToLocalRepository",
+    )
+
+    val repository = layout.buildDirectory.dir("repo")
+    val publishedVersion = providers.gradleProperty("VERSION_NAME")
+    val groupPath = providers.gradleProperty("GROUP").map { it.replace('.', '/') }
+    val expected = expectedPublishedArtifacts
+
+    doLast {
+        val version = publishedVersion.get()
+        val groupDir = repository.get().asFile.resolve(groupPath.get())
+        if (!groupDir.isDirectory) {
+            throw GradleException("Локальный репозиторий не найден: ${groupDir.absolutePath}")
+        }
+
+        val violations = mutableListOf<String>()
+        val actual = groupDir.listFiles().orEmpty().filter { it.isDirectory }.map { it.name }.toSet()
+
+        (expected.keys - actual).sorted().forEach { violations += "$it: публикация отсутствует" }
+        (actual - expected.keys).sorted().forEach { violations += "$it: неожиданная публикация, добавьте её в expectedPublishedArtifacts" }
+
+        expected.forEach { (artifact, extraExtension) ->
+            val versionDir = groupDir.resolve(artifact).resolve(version)
+            if (!versionDir.isDirectory) return@forEach
+
+            val base = "$artifact-$version"
+
+            fun require(condition: Boolean, message: String) {
+                if (!condition) violations += "$artifact: $message"
+            }
+
+            require(versionDir.resolve("$base.pom").isFile, "нет $base.pom")
+            require(versionDir.resolve("$base.module").isFile, "нет $base.module")
+
+            val sources = versionDir.resolve("$base-sources.jar")
+            require(sources.isFile && sources.length() > 0, "нет или пуст $base-sources.jar")
+
+            val javadoc = versionDir.resolve("$base-javadoc.jar")
+            require(javadoc.isFile && javadoc.length() > 0, "нет или пуст $base-javadoc.jar")
+
+            if (extraExtension != null) {
+                val binary = versionDir.resolve("$base.$extraExtension")
+                require(binary.isFile && binary.length() > 0, "нет или пуст $base.$extraExtension")
+            }
+        }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                "Локальная публикация неполна:\n" + violations.joinToString("\n") { "  - $it" },
+            )
+        }
+
+        logger.lifecycle(
+            "Локальная публикация проверена: ${expected.size} артефактов, " +
+                "у каждого есть pom, module, sources и непустой javadoc.",
+        )
+    }
+}

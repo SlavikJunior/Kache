@@ -32,10 +32,11 @@ android {
 }
 
 // The sample is a plain Android app that consumes the KMP modules through Gradle
-// project dependencies. It intentionally does not depend on `:cache-store-room`:
-// that module ships bundled SQLite for the JVM and is not usable on Android.
-// `:cache-android` supplies the Android conveniences (Context-based construction,
-// memory-pressure callbacks) but stays Room-free, matching this module's dependencies.
+// project dependencies. It intentionally does not depend on `:cache-store-room`: that
+// module is KMP and usable on Android, but the sample stays Room-free to keep the scenario
+// to the file backend. Room on Android is covered by `:cache-store-room`'s instrumented
+// suite instead. `:cache-android` supplies the Android conveniences (Context-based
+// construction, memory-pressure callbacks) and also adds no Room.
 dependencies {
     implementation(project(":cache-core"))
     implementation(project(":cache-storage"))
