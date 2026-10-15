@@ -71,16 +71,19 @@ def find_ide_log() -> str | None:
 
 
 def parse_failed(text: str) -> list[tuple[str, str]]:
-    """Достаёт из лога пары (имя файла, group:name:version)."""
-    match = re.search(r"(\d+) artifacts failed verification:\n((?:\s+- .*\n)+)", text)
-    if not match:
-        return []
+    """Достаёт из лога пары (имя файла, group:name:version).
+
+    Лог накапливается за всю сессию, поэтому в нём может быть несколько блоков
+    «N artifacts failed verification» — по одному на неудачный sync. Берём все:
+    первый блок давно закрытого прогона не должен перекрывать свежий.
+    """
     pairs = set()
-    for line in match.group(2).strip().split("\n"):
-        filename = re.search(r"-\s+(\S+\.(?:jar|zip))", line)
-        coords = re.search(r"\(([^)]+:[^)]+)\)", line)
-        if filename and coords:
-            pairs.add((filename.group(1), coords.group(1)))
+    for _, block in re.findall(r"(\d+) artifacts failed verification:\n((?:\s+- .*\n)+)", text):
+        for line in block.strip().split("\n"):
+            filename = re.search(r"-\s+(\S+\.(?:jar|zip))", line)
+            coords = re.search(r"\(([^)]+:[^)]+)\)", line)
+            if filename and coords:
+                pairs.add((filename.group(1), coords.group(1)))
     return sorted(pairs)
 
 
