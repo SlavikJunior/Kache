@@ -117,7 +117,7 @@ public class L1MemoryCache<K, V>(
         val now = timeSource.currentTimeMillis()
         // Kept as epoch millis internally: every comparison here is between timestamps,
         // so converting once on the way in is cheaper than converting on each check.
-        val expiresAt = ttl?.let { now + it.inWholeMilliseconds }
+        val expiresAt = ttl?.let { now.saturatingAdd(it.inWholeMilliseconds) }
 
         val isUpdate = entries.containsKey(key)
         entries[key] = Entry(value = value, createdAt = now, expiresAt = expiresAt)
@@ -207,12 +207,12 @@ public class L1MemoryCache<K, V>(
     ) {
         fun isExpired(now: Long): Boolean = expiresAt?.let { now > it } ?: false
 
-        fun remainingTtl(now: Long): Duration? = expiresAt?.let { (it - now).milliseconds }
+        fun remainingTtl(now: Long): Duration? = expiresAt?.let { it.saturatingSubtract(now).milliseconds }
 
         fun toRecord(): StorageRecord<V> = StorageRecord(
             value = value,
             createdAt = createdAt,
-            ttl = expiresAt?.let { (it - createdAt).milliseconds },
+            ttl = expiresAt?.let { it.saturatingSubtract(createdAt).milliseconds },
         )
     }
 
