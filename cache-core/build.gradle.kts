@@ -35,15 +35,11 @@ kotlin {
         commonMain.dependencies {
             // Flow<CacheResult<V>> is part of KmpCache public API
             api(libs.kotlinx.coroutines.core)
-            
-            // Clock.System is used only internally by SystemTimeSource
-            implementation(libs.kotlinx.datetime)
         }
 
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.kotlinx.datetime)
         }
     }
 }
