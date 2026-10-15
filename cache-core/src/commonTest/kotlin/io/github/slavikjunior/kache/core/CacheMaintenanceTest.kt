@@ -426,4 +426,55 @@ class CacheMaintenanceTest {
         assertNull(l1.get("in-memory"), "the in-memory tier must be swept too")
         assertNull(engine.get("on-disk"))
     }
+
+    @Test
+    fun aBackendReportingAHugeSizeIsStillAskedToEvict() = runTest {
+        // No device holds 2^32 records, but `StorageEngine.size()` is a Long and the excess is
+        // narrowed to an Int before it becomes a candidate budget. At exactly 2^32 over the
+        // limit that narrowing wraps to zero, which a backend reports as "nothing to evict" —
+        // so the cache stays over its limit and nothing anywhere looks wrong.
+        val engine = HugeCacheBackend(reportedSize = (1L shl 32) + 1)
+        val maintenance = StorageMaintenance(
+            storageEngine = engine,
+            timeSource = time,
+            maxSize = 1,
+        )
+
+        maintenance.enforceCapacity(protectedKey = null)
+
+        assertEquals(3, engine.removed.size, "every candidate the backend offers must be evicted")
+    }
+
+    /**
+     * Reports an implausible record count, to pin what the Long-to-Int narrowing between
+     * measuring the cache and asking it for candidates does. Offers at most three candidates,
+     * so an evicted count of one is the tell that the budget arrived truncated.
+     */
+    private class HugeCacheBackend(private val reportedSize: Long) : StorageEngine {
+
+        val removed = mutableListOf<String>()
+
+        override suspend fun get(key: String): StorageRecord<*>? = null
+
+        override suspend fun put(key: String, record: StorageRecord<*>) = Unit
+
+        override suspend fun remove(key: String): Boolean {
+            removed += key
+            return true
+        }
+
+        override suspend fun clear() = Unit
+
+        override suspend fun size(): Long = reportedSize
+
+        override suspend fun removeExpired(now: Long): Long = 0L
+
+        override suspend fun touch(key: String, accessedAt: Long): Boolean = false
+
+        override suspend fun evictionCandidates(
+            strategy: EvictionStrategy,
+            limit: Int,
+            now: Long,
+        ): List<String> = if (limit <= 0) emptyList() else List(minOf(limit, 3)) { "key-$it" }
+    }
 }
