@@ -41,14 +41,17 @@ kotlin {
             
             // Coroutines inherited transitively from :cache-core, but prefer explicit declaration
             implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.datetime)
-            implementation(libs.kotlinx.serialization.json)
+
+            // KSerializer appears in KotlinxJsonSerializer's public constructor, so it has to
+            // stay on the consumer's compile classpath. `implementation` would hide it and turn
+            // any `KotlinxJsonSerializer(User.serializer())` call into a compile error.
+            api(libs.kotlinx.serialization.json)
         }
 
         commonTest.dependencies {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.kotlinx.serialization.json)
+            api(libs.kotlinx.serialization.json)
             implementation(project(":cache-core"))
         }
     }

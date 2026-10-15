@@ -3,7 +3,6 @@ kotlin = "2.4.20"
 agp = "9.4.1"
 coroutines = "1.11.0"
 serialization = "1.11.0"
-datetime = "0.8.0"
 dokka = "2.2.0"
 bcv = "0.18.1"
 room = "2.8.5"
@@ -18,7 +17,6 @@ robolectric = "4.17"
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
-kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-sqlite = { module = "androidx.sqlite:sqlite", version.ref = "sqlite" }
