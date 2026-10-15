@@ -1,7 +1,9 @@
 package io.github.slavikjunior.kache.core
 
 import kotlin.test.Test
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,6 +55,39 @@ class StorageRecordTest {
         assertContentEquals(payload, record.data)
         assertEquals(42L, record.createdAt)
         assertEquals(7.milliseconds, record.ttl)
+    }
+
+    // --- timestamps read back from disk or a database row ---
+
+    @Test
+    fun aCreationTimeAtTheTopOfTheRangeDoesNotWrapIntoAnAlreadyExpiredRecord() {
+        val record = StorageRecord(value = "v", data = "v".encodeToByteArray(), createdAt = Long.MAX_VALUE, ttl = 1.seconds)
+
+        assertEquals(Long.MAX_VALUE, record.expiresAt(), "the sum must saturate, not wrap to a negative instant")
+        assertFalse(record.isExpired(Long.MAX_VALUE), "a record that cannot expire yet must not read as expired")
+    }
+
+    @Test
+    fun aCreationTimeAtTheBottomOfTheRangeReadsAsExpiredRatherThanYoung() {
+        // createdAt comes off disk. Subtracting it from the current time wraps to a negative
+        // age, which used to read as "brand new" — a record planted with a bogus timestamp
+        // that then never expired.
+        val record = StorageRecord(value = "v", data = "v".encodeToByteArray(), createdAt = Long.MIN_VALUE, ttl = 1.seconds)
+
+        assertTrue(record.isExpired(0L), "a record claiming a timestamp no clock could produce must not read as fresh")
+    }
+
+    @Test
+    fun anEnormousTtlDoesNotWrapTheExpiryIntoThePast() {
+        val record = StorageRecord(
+            value = "v",
+            data = "v".encodeToByteArray(),
+            createdAt = 1_000L,
+            ttl = Long.MAX_VALUE.days,
+        )
+
+        assertEquals(Long.MAX_VALUE, record.expiresAt())
+        assertFalse(record.isExpired(Long.MAX_VALUE / 2))
     }
 
     @Test

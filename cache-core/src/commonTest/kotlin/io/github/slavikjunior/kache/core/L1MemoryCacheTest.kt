@@ -7,6 +7,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -250,6 +251,19 @@ class L1MemoryCacheTest {
 
         cache.clear()
         assertEquals(0, cache.size())
+    }
+
+    @Test
+    fun anEnormousTtlDoesNotExpireTheEntryTheInstantItIsWritten() = runTest {
+        // The clock is already far enough along that adding the TTL leaves the range a Long
+        // holds. An expiry timestamp that wraps into the past is an entry that expires on the
+        // write that created it, which reads as the cache silently refusing to store anything.
+        val far = MutableTimeSource(initialTimeMillis = Long.MAX_VALUE / 2)
+        val cache = L1MemoryCache<String, String>(maxSize = 4, timeSource = far)
+
+        cache.put("k", "v", ttl = Long.MAX_VALUE.days)
+
+        assertEquals("v", cache.get("k")?.value)
     }
 
     @Test

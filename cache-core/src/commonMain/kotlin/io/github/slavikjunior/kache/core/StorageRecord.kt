@@ -41,7 +41,7 @@ public data class StorageRecord<out V>(
      */
     public fun isExpired(currentTimeMillis: Long): Boolean {
         val lifetime = ttl ?: return false
-        return currentTimeMillis - createdAt > lifetime.inWholeMilliseconds
+        return currentTimeMillis.saturatingSubtract(createdAt) > lifetime.inWholeMilliseconds
     }
 
     /**
@@ -49,7 +49,7 @@ public data class StorageRecord<out V>(
      *
      * @return Absolute expiration timestamp in milliseconds since epoch, or null.
      */
-    public fun expiresAt(): Long? = ttl?.let { createdAt + it.inWholeMilliseconds }
+    public fun expiresAt(): Long? = ttl?.let { createdAt.saturatingAdd(it.inWholeMilliseconds) }
 
     public companion object {
         /**
