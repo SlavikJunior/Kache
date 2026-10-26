@@ -25,9 +25,9 @@ kotlin {
         // in `commonMain` and only calls the serializers from common code is the boundary
         // this harness exists to prove.
         commonMain.dependencies {
-            implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
-            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
-            implementation("io.github.slavikjunior.kache:cache-store-room:0.1.0")
+            implementation("io.github.slavikjunior.kache:cache-core:1.0.0")
+            implementation("io.github.slavikjunior.kache:cache-storage:1.0.0")
+            implementation("io.github.slavikjunior.kache:cache-store-room:1.0.0")
         }
     }
 }

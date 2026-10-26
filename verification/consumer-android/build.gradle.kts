@@ -23,10 +23,10 @@ android {
 // Coordinates only, resolved from the local Maven repository. There is deliberately no
 // `project(...)` anywhere: the whole point is to cross the boundary a real consumer crosses.
 dependencies {
-    implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
-    implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
-    implementation("io.github.slavikjunior.kache:cache-android:0.1.0")
-    implementation("io.github.slavikjunior.kache:cache-store-room:0.1.0")
+    implementation("io.github.slavikjunior.kache:cache-core:1.0.0")
+    implementation("io.github.slavikjunior.kache:cache-storage:1.0.0")
+    implementation("io.github.slavikjunior.kache:cache-android:1.0.0")
+    implementation("io.github.slavikjunior.kache:cache-store-room:1.0.0")
 
     // No explicit kotlinx-serialization dependency: `KSerializer` is part of
     // KotlinxJsonSerializer's public API, so `cache-storage` has to expose it as `api`.

@@ -10,7 +10,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
+            implementation("io.github.slavikjunior.kache:cache-core:1.0.0")
         }
     }
 }
