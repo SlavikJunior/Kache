@@ -46,11 +46,23 @@ public class KacheStateHolder<K, V>(
     private var loadJob: Job? = null
 
     /**
+     * Identifies the current read.
+     *
+     * The flag has to be cleared when a read finishes — including one superseded by a newer
+     * read — and comparing jobs is not enough: a coroutine started on an immediate dispatcher
+     * can finish before its `Job` is assigned to [loadJob]. A counter incremented before the
+     * launch has no such window.
+     */
+    private var loadGeneration: Long = 0L
+
+    /**
      * Reads [key], fetching fresh data when [strategy] asks for it, and publishes the
      * outcome into [kacheState].
      *
      * A call cancels the read started previously, so the state never reflects two keys at
-     * once.
+     * once. A call for a *different* key also drops the value currently displayed, because it
+     * belongs to the previous key; a call for the same key keeps it, so a retry dims the
+     * screen instead of blanking it.
      *
      * @param key Key to read.
      * @param fetcher Loads fresh data. Called only when the strategy needs it, so an
@@ -63,14 +75,36 @@ public class KacheStateHolder<K, V>(
         strategy: CacheStrategy = CacheStrategy.CacheFirst,
     ) {
         val request = Request(key, fetcher, strategy)
+        val keyChanged = lastRequest?.key != key
         lastRequest = request
+        val generation = ++loadGeneration
 
         loadJob?.cancel()
+
+        // The read is in flight from this moment. The cache pipeline never emits
+        // `CacheResult.Loading` — it publishes results only — so without this the flag could
+        // never become true and a consumer would have no spinner to show.
+        //
+        // A read for a different key also drops the displayed value: it belongs to the
+        // previous key, and keeping it would render the old screen's data under the new
+        // screen's title. A read for the same key keeps the value, so a retry dims the screen
+        // instead of blanking it.
+        _kacheState.update { previous ->
+            if (keyChanged) CachedState(isLoading = true) else previous.copy(isLoading = true, error = null)
+        }
+
         loadJob = scope.launch {
-            cache.get(request.key, request.strategy) { request.fetcher(it) }
-                .collect { result ->
-                    _kacheState.update { previous -> result.foldedInto(previous) }
+            try {
+                cache.get(request.key, request.strategy) { request.fetcher(it) }
+                    .collect { result ->
+                        _kacheState.update { previous -> result.foldedInto(previous) }
+                    }
+            } finally {
+                // A superseded read must not clear the flag of the read that replaced it.
+                if (generation == loadGeneration) {
+                    _kacheState.update { it.copy(isLoading = false) }
                 }
+            }
         }
     }
 
@@ -101,21 +135,22 @@ public class KacheStateHolder<K, V>(
         // should replace it, but a refresh that has not should not blank the view.
         is CacheResult.Loading -> previous.copy(
             data = cachedData ?: previous.data,
-            isLoading = true,
             error = null,
         )
 
-        is CacheResult.Success -> CachedState(
+        // `isLoading` is deliberately carried over rather than cleared: a revalidating
+        // strategy emits the cached value while the refresh is still running, and "a read is
+        // in flight" is the truth for that whole window. `load` clears it when the flow
+        // completes.
+        is CacheResult.Success -> previous.copy(
             data = data,
             origin = origin,
-            isLoading = false,
             error = null,
         )
 
         // An error may still carry a usable fallback, so the value survives it.
         is CacheResult.Error -> previous.copy(
             data = this.cachedData ?: previous.data,
-            isLoading = false,
             error = this.error,
         )
     }

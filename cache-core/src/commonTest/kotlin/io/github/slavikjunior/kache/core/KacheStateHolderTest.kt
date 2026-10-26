@@ -146,6 +146,39 @@ class KacheStateHolderTest {
     }
 
     @Test
+    fun aLoadForADifferentKeyDropsTheValueThatBelongsToTheOldKey() = runTest {
+        val holder = holder(this)
+        holder.load(key = "a", fetcher = { "value-a" })
+        advance()
+
+        holder.load(key = "b", fetcher = { "value-b" })
+
+        // The new read has not produced anything yet: if the old value survived, the screen
+        // would render key-a's data under key-b's title while the spinner runs.
+        val state = holder.kacheState.value
+        assertNull(state.data, "the previous key's value must not be shown for a new key")
+        assertNull(state.origin)
+        assertTrue(state.isLoading)
+    }
+
+    @Test
+    fun aLoadForTheSameKeyKeepsTheValueWhileRefreshing() = runTest {
+        val holder = holder(this)
+        holder.load(key = "a", fetcher = { "value-a" })
+        advance()
+
+        holder.load(
+            key = "a",
+            fetcher = { "value-a-2" },
+            strategy = CacheStrategy.NetworkFirst,
+        )
+
+        val state = holder.kacheState.value
+        assertEquals("value-a", state.data, "a refresh dims the screen, it does not blank it")
+        assertTrue(state.isLoading)
+    }
+
+    @Test
     fun clearCacheEmptiesStorageAndResetsTheState() = runTest {
         val holder = holder(this)
         holder.load(key = "k", fetcher = { "v" })
