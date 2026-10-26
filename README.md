@@ -762,7 +762,9 @@ device:
 `0.1.0`. Nine roadmap phases are defined; eight are implemented and the ninth
 (observability) is deliberately not started. Capacity limits, eviction strategies and
 optional expired-record reaping shipped alongside them, and a thirteen-finding security audit
-is closed out (see `SECURITY.md` and the audit write-up).
+is closed out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](docs/security-audit.md)).
+Module layering, data flow and the release specification are documented in
+[`docs/`](docs/ARCHITECTURE.md), and the release history is in [`CHANGELOG.md`](CHANGELOG.md).
 
 **Test coverage** — 521 tests in the standard matrix, plus a 20-test instrumented suite, green
 on every host:
@@ -810,8 +812,10 @@ contract as the host and iOS ones.
 - **`KacheException.ExpiredException` was removed.** Nothing ever threw it, and it was the one
   exception that put a caller-supplied key into `message` and `toString`. An expired record is
   a miss, not an error. A consumer that caught it will not compile.
-- Not yet published to Maven Central. See `docs/` locally or the release notes for the
-  remaining manual steps (namespace verification and the Portal User Token).
+- Not yet published to Maven Central. The remaining manual steps — the GPG key, namespace
+  verification and the Portal User Token — are tracked in
+  [`docs/BACKLOG.md`](docs/BACKLOG.md) and
+  [`docs/specs/03_platform_coverage_and_release_spec.md`](docs/specs/03_platform_coverage_and_release_spec.md).
 
 ## License
 
