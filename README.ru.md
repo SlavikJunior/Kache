@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-743%20green-1D6B4F.svg)](#покрытие-тестами)
+[![Tests](https://img.shields.io/badge/tests-738%20green-1D6B4F.svg)](#покрытие-тестами)
 
 [English](README.md) · **Русский**
 
@@ -823,11 +823,12 @@ bundled-драйвер SQLite:
 просроченных записей приехали вместе с ними, а аудит безопасности из тринадцати находок
 закрыт (см. [`SECURITY.md`](SECURITY.md) и [`docs/security-audit.md`](docs/security-audit.md)).
 Слои модулей, поток данных и спецификация релиза описаны в
-[`docs/`](docs/ARCHITECTURE.md), история версий — в [`CHANGELOG.md`](CHANGELOG.md).
+[`docs/`](docs/ARCHITECTURE.md), обещание версии `1.x` — в
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md), история версий — в [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Покрытие тестами
 
-743 теста в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
+738 тестов в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
 
 | Модуль | JVM | Android-хост | iOS-симулятор | Android-устройство |
 |---|---:|---:|---:|---:|

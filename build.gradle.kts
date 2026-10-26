@@ -309,3 +309,111 @@ val verifyLocalPublication by tasks.registering {
         )
     }
 }
+
+/**
+ * Checks that the test counts written in the documentation match the tests that actually ran.
+ *
+ * The counts drifted three times in this project — and once `AGENTS.md` disagreed with itself —
+ * because a number changed in one file and the prose was updated by hand in another. A number
+ * nobody machine-checks is a number that is eventually wrong.
+ *
+ * The task reads whatever results exist under each module's `build/test-results` and refuses to pass when
+ * they are missing, so "run `verifyDocCounts` on a clean tree" fails loudly instead of
+ * comparing against nothing. The Android-device column is not checked: it needs an emulator,
+ * which no local run guarantees.
+ */
+val verifyDocCounts by tasks.registering {
+    group = "verification"
+    description = "Verifies the test counts in README and docs/BACKLOG.md against the test results."
+
+    doLast {
+        val root = layout.projectDirectory.asFile
+
+        /** Module → the test task that fills each column of the matrix. */
+        val matrix = linkedMapOf(
+            ":cache-core" to Triple("jvmTest", "testAndroidHostTest", "iosSimulatorArm64Test"),
+            ":cache-storage" to Triple("jvmTest", "testAndroidHostTest", "iosSimulatorArm64Test"),
+            ":cache-store-room" to Triple("jvmTest", "testAndroidHostTest", "iosSimulatorArm64Test"),
+            ":cache-android" to Triple(null, "testAndroidHostTest", null),
+            ":sample" to Triple("desktopTest", "testAndroidHostTest", "iosSimulatorArm64Test"),
+        )
+
+        fun count(module: String, task: String?): Int? {
+            if (task == null) return null
+            val dir = File(root, "${module.removePrefix(":")}/build/test-results/$task")
+            val files = dir.listFiles { file -> file.extension == "xml" }.orEmpty()
+            if (files.isEmpty()) return null
+            return files.sumOf { file ->
+                Regex("""tests="(\d+)"""").find(file.readText())?.groupValues?.get(1)?.toInt() ?: 0
+            }
+        }
+
+        val measured = matrix.mapValues { (module, tasks) ->
+            Triple(count(module, tasks.first), count(module, tasks.second), count(module, tasks.third))
+        }
+        val missing = measured.filterValues { it.first == null && it.second == null && it.third == null }.keys
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Нет результатов тестов для ${missing.joinToString()}. " +
+                    "Сначала выполните `./gradlew check` (или соответствующие test-таски).",
+            )
+        }
+
+        val violations = mutableListOf<String>()
+
+        // docs/BACKLOG.md: the matrix table is the single place the per-module numbers live.
+        val backlog = File(root, "docs/BACKLOG.md")
+        if (!backlog.isFile) {
+            violations += "docs/BACKLOG.md отсутствует"
+        } else {
+            val rows = backlog.readLines().filter { it.startsWith("| `:") }
+            val seen = mutableSetOf<String>()
+            rows.forEach { row ->
+                val cells = row.split('|').map(String::trim)
+                val module = cells[1].trim('`')
+                val expected = listOf(cells[2], cells[3], cells[4])
+                val actual = measured[module] ?: run {
+                    violations += "$module указан в таблице, но не измеряется"
+                    return@forEach
+                }
+                seen += module
+                expected.forEachIndexed { index, cell ->
+                    val value = cell.removeSuffix(" (desktop)").takeUnless { it == "—" }?.toInt()
+                        ?: return@forEachIndexed
+                    val measuredValue = actual.toList()[index] ?: return@forEachIndexed
+                    if (value != measuredValue) {
+                        violations += "$module, колонка ${listOf("JVM", "Android host", "iOS sim")[index]}: " +
+                            "в таблице $value, реально $measuredValue"
+                    }
+                }
+            }
+            (measured.keys - seen).forEach { violations += "$it не указан в таблице docs/BACKLOG.md" }
+        }
+
+        val total = measured.values.sumOf { (a, b, c) -> (a ?: 0) + (b ?: 0) + (c ?: 0) }
+        listOf("README.md", "README.ru.md").forEach { name ->
+            val file = File(root, name)
+            if (!file.isFile) return@forEach
+            val text = file.readText()
+            val badge = Regex("""tests-(\d+)%20green""").find(text)?.groupValues?.get(1)?.toInt()
+            if (badge != null && badge != total) {
+                violations += "$name: бейдж $badge, реально $total"
+            }
+            Regex("""\b(\d+)\s+(?:tests|теста|тестов) (?:in|в) the standard matrix|standard matrix""")
+            val prose = Regex("""(\d+)\s+(?:tests|теста|тестов)\s+(?:in the standard matrix|в стандартной матрице)""")
+                .find(text)?.groupValues?.get(1)?.toInt()
+            if (prose != null && prose != total) {
+                violations += "$name: в тексте $prose, реально $total"
+            }
+        }
+
+        if (violations.isNotEmpty()) {
+            throw GradleException(
+                "Счётчики тестов в документации расходятся с кодом:\n" +
+                    violations.joinToString("\n") { "  - $it" } +
+                    "\nЗначения измерены по XML-отчётам: $total в матрице.",
+            )
+        }
+        logger.lifecycle("Счётчики тестов совпадают с документацией: $total в матрице.")
+    }
+}

@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-743%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-738%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -824,9 +824,11 @@ device:
 optional expired-record reaping shipped alongside them, and a thirteen-finding security audit
 is closed out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](docs/security-audit.md)).
 Module layering, data flow and the release specification are documented in
-[`docs/`](docs/ARCHITECTURE.md), and the release history is in [`CHANGELOG.md`](CHANGELOG.md).
+[`docs/`](docs/ARCHITECTURE.md), the promise a `1.x` version makes is in
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md), and the release history is in
+[`CHANGELOG.md`](CHANGELOG.md).
 
-**Test coverage** — 743 tests in the standard matrix, plus a 20-test instrumented suite, green
+**Test coverage** — 738 tests in the standard matrix, plus a 20-test instrumented suite, green
 on every host:
 
 | Module | JVM | Android host | iOS simulator | Android device |

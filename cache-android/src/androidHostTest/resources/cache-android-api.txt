@@ -1,0 +1,38 @@
+# Public API of :cache-android, generated from the compiled Android classes.
+# Regenerate with KACHE_UPDATE_API_SURFACE=1 ./gradlew :cache-android:testAndroidHostTest
+# suspend functions are rendered without their Continuation; a mangled name is un-mangled.
+# Class type parameters are kept; a method's parameter types are erased, as the JVM sees them.
+# `final` and `abstract` show whether a member may be overridden, which is part of the promise.
+
+class io.github.slavikjunior.kache.android.CacheFactoryKt
+  const val DEFAULT_CACHE_DIR_NAME: java.lang.String
+  final fun getDEFAULT_TTL(): long
+  final fun l2Cache(android.content.Context, io.github.slavikjunior.kache.core.KacheSerializer, kotlin.time.Duration, java.lang.String, io.github.slavikjunior.kache.core.RetryPolicy, io.github.slavikjunior.kache.core.TimeSource, java.lang.Long, io.github.slavikjunior.kache.core.EvictionStrategy, kotlin.time.Duration, io.github.slavikjunior.kache.core.KacheLogger): io.github.slavikjunior.kache.core.L2KmpCache
+  final fun l2Cache(io.github.slavikjunior.kache.core.StorageEngine, io.github.slavikjunior.kache.core.KacheSerializer, kotlin.time.Duration, io.github.slavikjunior.kache.core.RetryPolicy, io.github.slavikjunior.kache.core.TimeSource, java.lang.Long, io.github.slavikjunior.kache.core.EvictionStrategy, kotlin.time.Duration, io.github.slavikjunior.kache.core.KacheLogger): io.github.slavikjunior.kache.core.L2KmpCache
+
+
+class io.github.slavikjunior.kache.android.CacheLifecycleKt
+  final fun clearWhenScopeCancelled(io.github.slavikjunior.kache.core.KmpCache, kotlinx.coroutines.CoroutineScope): kotlinx.coroutines.Job
+
+
+class io.github.slavikjunior.kache.android.CacheMemoryPressureCallbacks, android.content.ComponentCallbacks2
+  ctor(kotlinx.coroutines.CoroutineScope, java.util.List)
+  fun onConfigurationChanged(android.content.res.Configuration): void
+  fun onLowMemory(): void
+  fun onTrimMemory(int): void
+
+
+class io.github.slavikjunior.kache.android.CacheMemoryPressureKt
+  final fun registerCacheMemoryPressureCallbacks(android.app.Application, kotlinx.coroutines.CoroutineScope, io.github.slavikjunior.kache.core.KmpCache[]): io.github.slavikjunior.kache.android.CacheMemoryPressureCallbacks
+  final fun requiresImmediateCacheClear(int): boolean
+  final fun unregisterCacheMemoryPressureCallbacks(android.app.Application, io.github.slavikjunior.kache.android.CacheMemoryPressureCallbacks): void
+
+
+abstract class io.github.slavikjunior.kache.android.KacheableViewModel<K, V> extends androidx.lifecycle.AndroidViewModel
+  ctor(android.app.Application, io.github.slavikjunior.kache.core.KmpCache)
+  suspend fun clearCache(): Any?
+  final fun getKacheState(): kotlinx.coroutines.flow.StateFlow
+  suspend fun invalidate(java.lang.Object): Any?
+  fun load(java.lang.Object, kotlin.jvm.functions.Function2, io.github.slavikjunior.kache.core.CacheStrategy): void
+  final fun retry(): void
+

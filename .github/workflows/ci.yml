@@ -51,6 +51,12 @@ jobs:
       - name: Verify binary compatibility
         run: ./gradlew apiCheck
 
+      # The test counts in README and docs/BACKLOG.md were three different numbers at one
+      # point. `check` has just produced the XML this reads, so a drift fails the build here
+      # instead of waiting for someone to notice it in prose.
+      - name: Verify documented test counts
+        run: ./gradlew verifyDocCounts
+
       # The sample is an app on three platforms: the Android entry point is built and
       # linted here, and the desktop (JVM) target is compiled so the shared code is proven
       # to build for a second JVM target as well.

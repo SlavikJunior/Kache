@@ -67,3 +67,18 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
+
+// The Android target publishes an AAR, and BCV cannot dump it (see AndroidApiSurfaceTest), so
+// the test renders the public surface itself. It has to be told where the production classes
+// are: host-test classes share the package and would otherwise be rendered as part of the API.
+// `matching` rather than `named`: the AGP KMP plugin registers the host-test task lazily, so a
+// direct lookup at configuration time fails.
+tasks.matching { it.name == "testAndroidHostTest" }.configureEach {
+    this as Test
+    val classesDir = layout.buildDirectory.dir("classes/kotlin/android/main")
+    systemProperty("kache.apiSurfaceClassesDir", classesDir.get().asFile.absolutePath)
+
+    // Regenerating the golden file is an explicit act: `KACHE_UPDATE_API_SURFACE=1` is read by
+    // the test, and Gradle has to pass the environment through for that to work.
+    environment("KACHE_UPDATE_API_SURFACE", System.getenv("KACHE_UPDATE_API_SURFACE") ?: "")
+}
