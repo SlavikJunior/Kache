@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-657%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-702%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -97,7 +97,7 @@ There are good general-purpose caches. The gap this fills is narrower:
 | Module | JVM | Android | iOS | What it is |
 |---|:---:|:---:|:---:|---|
 | `:cache-core` | ✅ | ✅ | ✅ | L1 memory cache, strategies, `StorageEngine` SPI |
-| `:cache-storage` | ✅ | ✅ | ✅² | Serializers on every target; file-based L2 on JVM/Android |
+| `:cache-storage` | ✅ | ✅ | ✅² | File-based L2 and serializers on every target |
 | `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2 backend |
 | `:cache-android` | ❌ | ✅ | ❌ | Android conveniences (`l2Cache`, caching ViewModel) |
 | `:sample` | ✅ | ✅ | ✅ | Compose Multiplatform car catalogue, shared by all three |
@@ -107,10 +107,11 @@ There are good general-purpose caches. The gap this fills is narrower:
 > variant because `androidx.sqlite` 2.7.1 does not publish one, so the dependency cannot
 > resolve for that target. `iosX64` is deprecated by Apple and is not offered by the sample.
 >
-> ² `:cache-storage` publishes an iOS klib that contains the serializers
-> (`KotlinxJsonSerializer`, `StringSerializer`) and `KacheSerializer`. `FileStorageEngine`
-> needs `java.io`, so it is compiled for JVM and Android only; on iOS the durable tier comes
-> from `:cache-store-room`.
+> ² `:cache-storage` publishes one file backend for every target. The engine itself is common
+> code; only the file-system calls differ — `java.io` on JVM and Android, kotlinx-io on iOS —
+> because kotlinx-io's JVM file system needs Android API 26 while the library supports 23. On
+> iOS this means a durable L2 without Room; `:cache-store-room` remains the choice when you
+> want queries and migrations.
 
 `0.1.0` is published to Maven Central. The artifacts are signed and resolve from
 `mavenCentral()`; see [Project status](#project-status).
@@ -690,7 +691,7 @@ pull Room or WorkManager.
    ┌────────────▼──────┐  ┌────▼──────────────┐
    │  :cache-storage   │  │ :cache-store-room │
    │  FileStorageEngine│  │ RoomStorageEngine │
-   │  jvmCommonMain    │  │ jvm/android/ios   │
+   │  jvm/android/ios   │  │ jvm/android/ios   │
    └───────────────────┘  └───────────────────┘
 
         ┌──────────────────────────────┐
@@ -713,8 +714,11 @@ it is only refreshed when a cache has a `maxSize` to begin with.
 `:cache-core` owns policy and depends on nothing but coroutines. The backends depend on it,
 never on each other. `:cache-android` is a convenience layer and adds no storage.
 
-`FileStorageEngine` lives in a `jvmCommonMain` source set because JVM and Android share the
-same `java.io` implementation; it was previously duplicated per platform.
+`FileStorageEngine` is common code with three platform file-system implementations behind it:
+`java.io` on JVM and Android, kotlinx-io on iOS. The split is not a preference — kotlinx-io's
+JVM file system is built on `java.nio.file`, which needs Android API 26, and the library
+supports 23. The engine's algorithm, key encoding and the temp-then-move protocol are shared,
+so a record written by any platform reads back on any other.
 
 ## Building from source
 
@@ -822,7 +826,7 @@ is closed out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](d
 Module layering, data flow and the release specification are documented in
 [`docs/`](docs/ARCHITECTURE.md), and the release history is in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Test coverage** — 657 tests in the standard matrix, plus a 20-test instrumented suite, green
+**Test coverage** — 702 tests in the standard matrix, plus a 20-test instrumented suite, green
 on every host:
 
 | Module | JVM | Android host | iOS simulator | Android device |

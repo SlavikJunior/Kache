@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-657%20green-1D6B4F.svg)](#покрытие-тестами)
+[![Tests](https://img.shields.io/badge/tests-702%20green-1D6B4F.svg)](#покрытие-тестами)
 
 [English](README.md) · **Русский**
 
@@ -98,7 +98,7 @@ cache.get(
 | Модуль | JVM | Android | iOS | Что это |
 |---|:---:|:---:|:---:|---|
 | `:cache-core` | ✅ | ✅ | ✅ | Кэш в памяти, стратегии, SPI `StorageEngine` |
-| `:cache-storage` | ✅ | ✅ | ✅² | Сериализаторы на всех таргетах; файловый L2 — на JVM/Android |
+| `:cache-storage` | ✅ | ✅ | ✅² | Файловый L2 и сериализаторы на всех таргетах |
 | `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2-бэкенд |
 | `:cache-android` | ❌ | ✅ | ❌ | Удобства для Android (`l2Cache`, кеширующая ViewModel) |
 | `:sample` | ✅ | ✅ | ✅ | Каталог машин на Compose Multiplatform, общий для трёх платформ |
@@ -108,10 +108,11 @@ cache.get(
 > потому что `androidx.sqlite` 2.7.1 его не публикует и зависимость не разрешается для
 > этого таргета. `iosX64` снят Apple с поддержки и в сэмпле не предлагается.
 >
-> ² `:cache-storage` публикует iOS-klib, в котором лежат сериализаторы
-> (`KotlinxJsonSerializer`, `StringSerializer`) и `KacheSerializer`. `FileStorageEngine`
-> построен на `java.io` и собирается только под JVM и Android; на iOS надёжный уровень
-> даёт `:cache-store-room`.
+> ² `:cache-storage` публикует один файловый движок на все таргеты. Сам движок — общий код;
+> различаются только вызовы файловой системы: `java.io` на JVM и Android, kotlinx-io на iOS,
+> потому что файловая система kotlinx-io на JVM требует Android API 26, а библиотека
+> поддерживает 23. На iOS это даёт надёжный L2 без Room; `:cache-store-room` остаётся
+> выбором, когда нужны запросы и миграции.
 
 Версия `0.1.0` опубликована в Maven Central. Артефакты подписаны и разрешаются из
 `mavenCentral()` — см. [Статус проекта](#статус-проекта).
@@ -689,7 +690,7 @@ WorkManager.
    ┌────────────▼──────┐  ┌────▼──────────────┐
    │  :cache-storage   │  │ :cache-store-room │
    │  FileStorageEngine│  │ RoomStorageEngine │
-   │  jvmCommonMain    │  │ jvm/android/ios   │
+   │  jvm/android/ios   │  │ jvm/android/ios   │
    └───────────────────┘  └───────────────────┘
 
         ┌──────────────────────────────┐
@@ -712,8 +713,11 @@ WorkManager.
 `:cache-core` владеет политикой и зависит только от корутин. Бэкенды зависят от него и
 никогда друг от друга. `:cache-android` — слой удобства, хранилища не добавляет.
 
-`FileStorageEngine` живёт в source set `jvmCommonMain`, потому что JVM и Android используют
-одну и ту же реализацию на `java.io`; раньше он дублировался по платформам.
+`FileStorageEngine` — общий код, под которым лежат три платформенные реализации файловых
+операций: `java.io` на JVM и Android, kotlinx-io на iOS. Разделение не вкусовое: файловая
+система kotlinx-io на JVM построена на `java.nio.file`, которому нужен Android API 26, а
+библиотека поддерживает 23. Алгоритм движка, кодирование ключей и протокол «временный файл →
+перемещение» общие, поэтому запись, сделанная на одной платформе, читается на любой другой.
 
 ## Сборка из исходников
 
@@ -823,7 +827,7 @@ bundled-драйвер SQLite:
 
 ### Покрытие тестами
 
-657 тестов в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
+702 теста в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
 
 | Модуль | JVM | Android-хост | iOS-симулятор | Android-устройство |
 |---|---:|---:|---:|---:|

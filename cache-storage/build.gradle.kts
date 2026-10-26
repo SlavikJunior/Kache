@@ -45,11 +45,17 @@ kotlin {
         jvmMain.get().dependsOn(jvmCommonMain)
         androidMain.get().dependsOn(jvmCommonMain)
 
-        // iOS видит только commonMain: файлового движка для него нет, публикуются только
-        // сериализаторы. Наборы создаются вручную, потому что ручные dependsOn выше всё
-        // равно отключают шаблон иерархии для этого модуля.
+        // Наборы создаются вручную, потому что ручные dependsOn выше всё равно отключают
+        // шаблон иерархии для этого модуля. Файловый движок теперь общий (commonMain), а
+        // iOS-реализация файловых операций лежит в iosMain и использует kotlinx-io.
         val iosMain by creating {
             dependsOn(commonMain.get())
+
+            dependencies {
+                // Only the iOS actual of FileOps uses it: the engine itself is common code, and
+                // `implementation` keeps kotlinx-io off the consumer's compile classpath.
+                implementation(libs.kotlinx.io.core)
+            }
         }
         iosArm64Main.get().dependsOn(iosMain)
         iosSimulatorArm64Main.get().dependsOn(iosMain)

@@ -9,6 +9,23 @@ minor release may contain breaking changes; each one is listed with what a consu
 
 ### Added
 
+**`:cache-storage` — a file backend on every target**
+- `FileStorageEngine` now runs on iOS, so the durable tier no longer has to be Room: the
+  engine's algorithm (record layout, key encoding, eviction ranking, temp-then-move writes)
+  moved to `commonMain` and only the file operations stayed platform-specific — `java.io` on
+  JVM and Android, kotlinx-io on iOS. A straight port to kotlinx-io was not possible: its JVM
+  file system is built on `java.nio.file`, which needs Android API 26 while the library
+  supports 23. The dependency is `implementation` and no kotlinx-io type appears in the public
+  API; no consumer needs to declare it.
+- `createFromCachesDirectory(cacheDirName)` for iOS, the counterpart of `createFromContext` on
+  Android: it resolves `NSCachesDirectory` so a caller does not have to know which Foundation
+  constant is the right one.
+- The record byte format is unchanged. `GoldenRecordTest` reads a record written by 0.1.0 on
+  every target, so an upgrade does not silently invalidate a consumer's disk cache.
+- `FileStorageEngineContractTest` in `commonTest` runs the same assertions on JVM, Android host
+  and the iOS simulator, including key-encoding injectivity, path-traversal keys, the size
+  limit, reaping and eviction order.
+
 **Observability — `:cache-core`**
 - `KacheLogger`: an injectable observer with no-op defaults for `onMiss`, `onHit`, `onFetch`,
   `onRetry`, `onError` and `onEvict`. Pass it to `L2KmpCache`, `ChainKmpCache`, or either
@@ -22,10 +39,10 @@ minor release may contain breaking changes; each one is listed with what a consu
 
 **`:cache-storage` on iOS**
 - `:cache-storage` publishes `iosArm64` and `iosSimulatorArm64` klibs carrying
-  `KacheSerializer`, `StringSerializer` and `KotlinxJsonSerializer`. `FileStorageEngine`
-  remains JVM/Android: it needs `java.io`. Without this artifact an iOS app that puts
-  `:cache-store-room` behind a cache has to reimplement `KacheSerializer` itself, including
-  the JSON nesting guard.
+  `KacheSerializer`, `StringSerializer`, `KotlinxJsonSerializer` and, since the file backend
+  became cross-platform, `FileStorageEngine`. The serializers alone are what unblocks an iOS
+  app that puts `:cache-store-room` behind a cache: without them it had to reimplement
+  `KacheSerializer` itself, including the JSON nesting guard.
 - The JVM-only `StackOverflowError` guard in `KotlinxJsonSerializer` became `expect`/`actual`:
   the type does not exist on Kotlin/Native, where stack exhaustion aborts the process.
 - The serializer tests moved to `commonTest` and now run on the simulator as well.
@@ -76,6 +93,11 @@ minor release may contain breaking changes; each one is listed with what a consu
   Nothing is removed; the JVM and Android artifacts are unchanged.
 - The sample's module layout changed (`:sample` + `:sample-android` + `iosApp`). It is not
   published, so no consumer is affected.
+- `FileStorageEngine.size()` no longer counts a file it did not write. Temporary files and
+  names the key encoding cannot have produced are excluded, the same rule
+  `evictionCandidates` already applied. The contract always said "approximate number of
+  records held", so nothing a caller could rely on changes; a stray file no longer makes
+  capacity management evict a live record early.
 
 ### Removed
 

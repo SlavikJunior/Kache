@@ -13,9 +13,24 @@ final class <#A: kotlin/Any?> io.github.slavikjunior.kache.storage/KotlinxJsonSe
     final fun serialize(#A): kotlin/ByteArray // io.github.slavikjunior.kache.storage/KotlinxJsonSerializer.serialize|serialize(1:0){}[0]
 }
 
+final class io.github.slavikjunior.kache.storage/FileStorageEngine : io.github.slavikjunior.kache.core/StorageEngine { // io.github.slavikjunior.kache.storage/FileStorageEngine|null[0]
+    constructor <init>(kotlin/String, kotlin/Long = ...) // io.github.slavikjunior.kache.storage/FileStorageEngine.<init>|<init>(kotlin.String;kotlin.Long){}[0]
+
+    final suspend fun clear() // io.github.slavikjunior.kache.storage/FileStorageEngine.clear|clear(){}[0]
+    final suspend fun evictionCandidates(io.github.slavikjunior.kache.core/EvictionStrategy, kotlin/Int, kotlin/Long): kotlin.collections/List<kotlin/String> // io.github.slavikjunior.kache.storage/FileStorageEngine.evictionCandidates|evictionCandidates(io.github.slavikjunior.kache.core.EvictionStrategy;kotlin.Int;kotlin.Long){}[0]
+    final suspend fun get(kotlin/String): io.github.slavikjunior.kache.core/StorageRecord<*>? // io.github.slavikjunior.kache.storage/FileStorageEngine.get|get(kotlin.String){}[0]
+    final suspend fun put(kotlin/String, io.github.slavikjunior.kache.core/StorageRecord<*>) // io.github.slavikjunior.kache.storage/FileStorageEngine.put|put(kotlin.String;io.github.slavikjunior.kache.core.StorageRecord<*>){}[0]
+    final suspend fun remove(kotlin/String): kotlin/Boolean // io.github.slavikjunior.kache.storage/FileStorageEngine.remove|remove(kotlin.String){}[0]
+    final suspend fun removeExpired(kotlin/Long): kotlin/Long // io.github.slavikjunior.kache.storage/FileStorageEngine.removeExpired|removeExpired(kotlin.Long){}[0]
+    final suspend fun size(): kotlin/Long // io.github.slavikjunior.kache.storage/FileStorageEngine.size|size(){}[0]
+    final suspend fun touch(kotlin/String, kotlin/Long): kotlin/Boolean // io.github.slavikjunior.kache.storage/FileStorageEngine.touch|touch(kotlin.String;kotlin.Long){}[0]
+}
+
 final class io.github.slavikjunior.kache.storage/StringSerializer : io.github.slavikjunior.kache.core/KacheSerializer<kotlin/String> { // io.github.slavikjunior.kache.storage/StringSerializer|null[0]
     constructor <init>() // io.github.slavikjunior.kache.storage/StringSerializer.<init>|<init>(){}[0]
 
     final fun deserialize(kotlin/ByteArray): kotlin/String // io.github.slavikjunior.kache.storage/StringSerializer.deserialize|deserialize(kotlin.ByteArray){}[0]
     final fun serialize(kotlin/String): kotlin/ByteArray // io.github.slavikjunior.kache.storage/StringSerializer.serialize|serialize(kotlin.String){}[0]
 }
+
+final fun io.github.slavikjunior.kache.storage/createFromCachesDirectory(kotlin/String = ..., kotlin/Long = ...): io.github.slavikjunior.kache.storage/FileStorageEngine // io.github.slavikjunior.kache.storage/createFromCachesDirectory|createFromCachesDirectory(kotlin.String;kotlin.Long){}[0]

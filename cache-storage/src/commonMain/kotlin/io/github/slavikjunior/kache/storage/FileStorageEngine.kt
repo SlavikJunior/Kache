@@ -2,31 +2,31 @@ package io.github.slavikjunior.kache.storage
 
 import io.github.slavikjunior.kache.core.EvictionStrategy
 import io.github.slavikjunior.kache.core.KacheException
+import io.github.slavikjunior.kache.core.StorageEngine
 import io.github.slavikjunior.kache.core.StorageRecord
 import io.github.slavikjunior.kache.core.recordComparator
-import java.io.File
-import java.io.IOException
-import java.util.PriorityQueue
+
+/** 16 MiB. Generous for a cache value, small enough that a corrupt file cannot OOM. */
+internal const val DEFAULT_MAX_RECORD_BYTES: Long = 16L * 1024 * 1024
 
 /**
  * [StorageEngine] backed by the local file system. One file per key.
  *
- * Shared by the JVM and Android targets through the `jvmCommonMain` source set: both use
- * `java.io`, so the implementation is identical and was previously duplicated per target.
+ * The algorithm lives in `commonMain` so every platform shares it: record layout, key
+ * encoding, eviction ranking and the temp-file protocol are the parts that must behave
+ * identically, and a second copy per target would drift. Files themselves are touched
+ * through [FileOps] — `java.io` on JVM and Android, kotlinx-io on iOS — because kotlinx-io's
+ * JVM file system needs Android API 26 and this module supports 23.
  *
- * Writes are made atomic: the payload goes to a temporary file which then replaces the
- * real one, so a process death mid-write cannot leave a half-written record behind. Each
- * write gets its own temporary file, so two writers racing on the same key cannot publish
- * each other's half-written bytes.
+ * Writes are made atomic: the payload goes to a temporary file which then replaces the real
+ * one, so a process death mid-write cannot leave a half-written record behind. Each write
+ * gets its own temporary file, so two writers racing on the same key cannot publish each
+ * other's half-written bytes.
  *
  * Expired records are returned rather than deleted by [get]. Whether an expired value is
  * still useful is a decision for the caching strategy above, so that a strategy such as
  * `StaleWhileRevalidate` can still read a stale value. Reaping is therefore explicit,
  * through [removeExpired] or [clear].
- *
- * Only `java.io` is used here, never `java.nio.file`. The latter arrived in Android API 26
- * while this module declares `minSdk 23`, and core library desugaring is not enabled, so a
- * `Files.readAllBytes` would throw `NoClassDefFoundError` on API 23–25 devices.
  *
  * @param rootDirectory Directory holding the record files. Created if missing.
  * @param maxRecordBytes Largest record this engine will read or write. A cache payload is
@@ -34,33 +34,44 @@ import java.util.PriorityQueue
  *   allocation; a file over this size is treated as corrupt rather than loaded. Defaults to
  *   16 MiB.
  */
-public class FileStorageEngine(
+public class FileStorageEngine internal constructor(
     rootDirectory: String,
-    private val maxRecordBytes: Long = DEFAULT_MAX_RECORD_BYTES,
-) : io.github.slavikjunior.kache.core.StorageEngine {
+    private val maxRecordBytes: Long,
+    private val files: FileOps,
+) : StorageEngine {
 
-    private val rootDir: File = File(rootDirectory)
+    /**
+     * @param rootDirectory Directory holding the record files. Created if missing.
+     * @param maxRecordBytes Largest record this engine will read or write.
+     */
+    public constructor(
+        rootDirectory: String,
+        maxRecordBytes: Long = DEFAULT_MAX_RECORD_BYTES,
+    ) : this(rootDirectory, maxRecordBytes, platformFileOps())
+
+    /** Root without a trailing separator, so [joinPath] cannot produce a doubled one. */
+    private val root: String = rootDirectory.trimEnd('/')
 
     init {
         require(maxRecordBytes > 0) { "maxRecordBytes must be positive, but was $maxRecordBytes" }
 
-        if (!rootDir.exists() && !rootDir.mkdirs() && !rootDir.isDirectory) {
+        if (!files.createDirectories(root)) {
             throw KacheException.DiskWriteException(
-                IOException("Cannot create cache directory: $rootDirectory")
+                IllegalArgumentException("Cannot create cache directory: $rootDirectory")
             )
         }
     }
 
     override suspend fun get(key: String): StorageRecord<*>? {
-        val file = fileFor(key)
-        if (!file.exists()) return null
+        val path = fileFor(key)
+        if (!files.exists(path)) return null
 
         return try {
-            val bytes = readEncoded(file)
+            val bytes = readEncoded(path)
             // Over the size limit: not a record this engine is willing to load. Dropped
             // like any other unreadable file so the key can be repopulated.
             if (bytes == null) {
-                file.delete()
+                files.delete(path)
                 null
             } else {
                 StorageRecordFileCodec.decode(bytes)
@@ -69,7 +80,7 @@ public class FileStorageEngine(
             throw e
         } catch (e: Exception) {
             // Unreadable or corrupt: drop it so the key can be repopulated on the next write.
-            file.delete()
+            files.delete(path)
             null
         }
     }
@@ -86,30 +97,38 @@ public class FileStorageEngine(
             )
         }
 
-        val target = fileFor(key)
-        var temp: File? = null
-
         try {
-            // A fresh temporary file per write. A fixed name derived from the target would
-            // be shared by concurrent writers of the same key, and one of them would move
-            // the other's partially written bytes into place.
-            temp = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, rootDir)
-            temp.writeBytes(encoded)
-            moveIntoPlace(temp, target)
-        } catch (e: IOException) {
-            temp?.delete()
+            files.writeAtomically(
+                target = fileFor(key),
+                directory = root,
+                bytes = encoded,
+                tempPrefix = TEMP_PREFIX,
+                tempSuffix = TEMP_SUFFIX,
+            )
+        } catch (e: KacheException) {
+            throw e
+        } catch (e: Exception) {
             throw KacheException.DiskWriteException(e)
         }
     }
 
-    override suspend fun remove(key: String): Boolean = fileFor(key).delete()
+    override suspend fun remove(key: String): Boolean = files.delete(fileFor(key))
 
     override suspend fun clear() {
-        rootDir.listFiles()?.forEach { it.delete() }
+        files.list(root).forEach { files.delete(joinPath(root, it.name)) }
     }
 
+    /**
+     * Number of records this engine wrote, as a file count.
+     *
+     * Temporary files and names [keyOf] cannot have produced are excluded: a stray file in the
+     * directory is not a record, and counting it would make capacity management evict a live
+     * record early. Counting names rather than decoding every payload keeps the call cheap
+     * enough to run on every write.
+     */
     override suspend fun size(): Long =
-        rootDir.listFiles()?.count { it.isFile && !it.name.endsWith(TEMP_SUFFIX) }?.toLong() ?: 0L
+        files.list(root).count { it.isRegularFile && !it.name.endsWith(TEMP_SUFFIX) && keyOf(it.name) != null }
+            .toLong()
 
     /**
      * Deletes every expired record and reports how many went.
@@ -122,14 +141,14 @@ public class FileStorageEngine(
      * absent and deletes it, so keeping the file would only make the size report wrong.
      */
     override suspend fun removeExpired(now: Long): Long {
-        val files = rootDir.listFiles() ?: return 0L
         var removed = 0L
 
-        files.forEach { file ->
-            if (!file.isFile || file.name.endsWith(TEMP_SUFFIX)) return@forEach
+        files.list(root).forEach { entry ->
+            if (!entry.isRegularFile || entry.name.endsWith(TEMP_SUFFIX)) return@forEach
 
+            val path = joinPath(root, entry.name)
             val expired = try {
-                val bytes = readEncoded(file)
+                val bytes = readEncoded(path)
                 bytes == null || StorageRecordFileCodec.decode(bytes).isExpired(now)
             } catch (e: KacheException) {
                 throw e
@@ -137,7 +156,7 @@ public class FileStorageEngine(
                 true
             }
 
-            if (expired && file.delete()) {
+            if (expired && files.delete(path)) {
                 removed++
             }
         }
@@ -153,20 +172,20 @@ public class FileStorageEngine(
      * window per key, which is what keeps a hot key from costing a write per read.
      */
     override suspend fun touch(key: String, accessedAt: Long): Boolean {
-        val file = fileFor(key)
-        if (!file.exists()) return false
+        val path = fileFor(key)
+        if (!files.exists(path)) return false
 
         val record = try {
-            val bytes = readEncoded(file)
+            val bytes = readEncoded(path)
             if (bytes == null) {
-                file.delete()
+                files.delete(path)
                 return false
             }
             StorageRecordFileCodec.decode(bytes)
         } catch (e: KacheException) {
             throw e
         } catch (e: Exception) {
-            file.delete()
+            files.delete(path)
             return false
         }
 
@@ -182,9 +201,9 @@ public class FileStorageEngine(
      * wrote and is skipped.
      *
      * Only the `limit` worst records are ever held at once: candidates are pushed through a
-     * bounded heap, so ranking a directory of a million records costs memory proportional to
-     * `limit`, not to the record count. Reading every header is still unavoidable — there is
-     * no index to order by when the backend is one file per key — but the sort is not.
+     * bounded structure, so ranking a directory of a million records costs memory proportional
+     * to `limit`, not to the record count. Reading every header is still unavoidable — there
+     * is no index to order by when the backend is one file per key — but the sort is not.
      */
     override suspend fun evictionCandidates(
         strategy: EvictionStrategy,
@@ -201,16 +220,16 @@ public class FileStorageEngine(
             if (expired != 0) expired else byStrategy.compare(left.record, right.record)
         }
 
-        // A max-heap under the eviction order: the head is always the candidate we would
-        // drop *last*, so overflowing it discards exactly the one we want to keep least.
-        val worstKept = PriorityQueue(limit, evictionOrder.reversed())
+        // A max-heap under the eviction order: its root is the *least* evictable candidate
+        // held, so an overflow replaces exactly the one we want to keep least.
+        val worstKept = WorstCandidates(limit, evictionOrder)
 
-        rootDir.listFiles().orEmpty().forEach { file ->
-            if (!file.isFile || file.name.endsWith(TEMP_SUFFIX)) return@forEach
+        files.list(root).forEach { entry ->
+            if (!entry.isRegularFile || entry.name.endsWith(TEMP_SUFFIX)) return@forEach
 
-            val key = keyOf(file.name) ?: return@forEach
+            val key = keyOf(entry.name) ?: return@forEach
             val record = try {
-                val bytes = readEncoded(file) ?: return@forEach
+                val bytes = readEncoded(joinPath(root, entry.name)) ?: return@forEach
                 StorageRecordFileCodec.decode(bytes)
             } catch (e: KacheException) {
                 throw e
@@ -219,53 +238,94 @@ public class FileStorageEngine(
             }
 
             worstKept.add(Candidate(record, key))
-            if (worstKept.size > limit) worstKept.poll()
         }
 
-        return worstKept.sortedWith(evictionOrder).map { it.key }
+        return worstKept.sorted().map { it.key }
     }
 
     /** A record paired with the key it is stored under. */
     private class Candidate(val record: StorageRecord<ByteArray>, val key: String)
 
-    private fun fileFor(key: String): File = File(rootDir, encodeKey(key))
+    /**
+     * Keeps the [limit] most evictable candidates, dropping the least evictable on overflow.
+     *
+     * A binary heap written here rather than taken from a library: `java.util.PriorityQueue`
+     * does not exist on Kotlin/Native, and an insertion-sorted list would turn ranking a large
+     * directory into `O(n · limit)`. The comparator is the eviction order, so the root is
+     * always the entry the strategy would keep longest — the one an overflow must discard.
+     */
+    private class WorstCandidates(
+        private val limit: Int,
+        private val order: Comparator<Candidate>,
+    ) {
+        private val heap = ArrayList<Candidate>(limit + 1)
+
+        fun add(candidate: Candidate) {
+            if (heap.size < limit) {
+                heap.add(candidate)
+                siftUp(heap.lastIndex)
+            } else if (order.compare(candidate, heap[0]) < 0) {
+                // More evictable than the worst kept so far: it takes that slot.
+                heap[0] = candidate
+                siftDown(0)
+            }
+        }
+
+        fun sorted(): List<Candidate> = heap.sortedWith(order)
+
+        private fun siftUp(from: Int) {
+            var child = from
+            while (child > 0) {
+                val parent = (child - 1) / 2
+                if (order.compare(heap[parent], heap[child]) >= 0) return
+                heap.swap(parent, child)
+                child = parent
+            }
+        }
+
+        private fun siftDown(from: Int) {
+            var parent = from
+            while (true) {
+                val left = parent * 2 + 1
+                if (left >= heap.size) return
+                val right = left + 1
+                val larger = if (right < heap.size && order.compare(heap[right], heap[left]) > 0) right else left
+                if (order.compare(heap[parent], heap[larger]) >= 0) return
+                heap.swap(parent, larger)
+                parent = larger
+            }
+        }
+
+        private fun ArrayList<Candidate>.swap(first: Int, second: Int) {
+            val value = this[first]
+            this[first] = this[second]
+            this[second] = value
+        }
+    }
+
+    private fun fileFor(key: String): String = joinPath(root, encodeKey(key))
 
     /**
      * Reads a record file, refusing to load one over [maxRecordBytes].
      *
      * @return The bytes, or null when the file is too large to be a record this engine wrote.
      */
-    private fun readEncoded(file: File): ByteArray? {
-        if (file.length() > maxRecordBytes) return null
-        return file.readBytes()
-    }
-
-    /**
-     * Moves [source] onto [target], replacing whatever was there.
-     *
-     * On Linux and Android `File.renameTo` is `rename(2)`: atomic, and it replaces an existing
-     * file. Neither is guaranteed on every platform, so a failure falls back to a copy, which
-     * is not atomic and is therefore only reached where the atomic move is unavailable.
-     */
-    private fun moveIntoPlace(source: File, target: File) {
-        if (source.renameTo(target)) return
-        source.copyTo(target, overwrite = true)
-        source.delete()
+    private fun readEncoded(path: String): ByteArray? {
+        val size = files.sizeBytes(path) ?: return null
+        if (size > maxRecordBytes) return null
+        return files.readBytes(path)
     }
 
     private companion object {
         private const val TEMP_SUFFIX = ".tmp"
         private const val TEMP_PREFIX = "kache-"
 
-        /** 16 MiB. Generous for a cache value, small enough that a corrupt file cannot OOM. */
-        private const val DEFAULT_MAX_RECORD_BYTES: Long = 16L * 1024 * 1024
-
         /**
          * Leading marker on every file name this engine writes.
          *
          * It is what makes path traversal impossible: without it a key of `..` would map
-         * onto the parent directory, and `File(rootDir, "..")` is a directory above the
-         * cache root. With the marker the name is always `k..`, which is an ordinary file.
+         * onto the parent directory, and joining the root with `..` names a directory above
+         * the cache root. With the marker the name is always `k..`, which is an ordinary file.
          */
         private const val FILE_NAME_MARKER = "k"
 
