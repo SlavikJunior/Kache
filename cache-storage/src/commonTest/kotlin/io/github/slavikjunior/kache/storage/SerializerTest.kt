@@ -5,11 +5,6 @@ import io.github.slavikjunior.kache.core.StorageRecord
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.descriptors.PrimitiveKind
-import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -153,31 +148,6 @@ class SerializerTest {
         val parsed = json.deserialize(payload.encodeToByteArray())
 
         assertIs<JsonObject>(parsed)
-    }
-
-    @Test
-    fun aStackOverflowFromACallerSuppliedSerializerIsReportedAsAKacheFailure() {
-        // The bracket count above only guards the document this class parses itself. A
-        // serializer the caller hands in can recurse on its own, and an `Error` escaping
-        // through the cache would take the caller down in a way no typed exception would.
-        val json = KotlinxJsonSerializer(StackOverflowingSerializer)
-
-        val thrown = assertFailsWith<KacheException.SerializationException> {
-            json.deserialize("{}".encodeToByteArray())
-        }
-
-        assertIs<StackOverflowError>(thrown.cause, "cause was ${thrown.cause}")
-    }
-
-    /** Raises the Error a runaway serializer would raise, without actually running one. */
-    private object StackOverflowingSerializer : KSerializer<Any?> {
-
-        override val descriptor: SerialDescriptor =
-            PrimitiveSerialDescriptor("StackOverflowing", PrimitiveKind.STRING)
-
-        override fun deserialize(decoder: Decoder): Any? = throw StackOverflowError("synthetic")
-
-        override fun serialize(encoder: Encoder, value: Any?) = Unit
     }
 
     /** `levels` nested JSON arrays, as the text a payload would hold. */

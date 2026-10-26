@@ -26,14 +26,39 @@ kotlin {
         }
     }
 
+    // iOS-таргеты публикуются ради сериализаторов, а не ради движка: FileStorageEngine
+    // построен на java.io и остаётся в jvmCommonMain. Без этого klib'а приложение на
+    // iOS не может ни передать `KotlinxJsonSerializer` в `:cache-store-room`, ни
+    // воспользоваться любым другим движком — ему пришлось бы заново реализовывать
+    // сериализацию у себя, вместе с защитой от глубокого JSON.
+    //
+    // iosX64 не объявляется: Apple сняла его с поддержки.
+    iosArm64()
+    iosSimulatorArm64()
+
     sourceSets {
-        // JVM and Android both use java.io, so FileStorageEngine is implemented once
-        // in a source set shared by the two targets instead of being duplicated.
+        // JVM и Android оба используют java.io, поэтому FileStorageEngine реализован один
+        // раз в общем source set вместо двух копий.
         val jvmCommonMain by creating {
             dependsOn(commonMain.get())
         }
         jvmMain.get().dependsOn(jvmCommonMain)
         androidMain.get().dependsOn(jvmCommonMain)
+
+        // iOS видит только commonMain: файлового движка для него нет, публикуются только
+        // сериализаторы. Наборы создаются вручную, потому что ручные dependsOn выше всё
+        // равно отключают шаблон иерархии для этого модуля.
+        val iosMain by creating {
+            dependsOn(commonMain.get())
+        }
+        iosArm64Main.get().dependsOn(iosMain)
+        iosSimulatorArm64Main.get().dependsOn(iosMain)
+
+        val iosTest by creating {
+            dependsOn(commonTest.get())
+        }
+        iosArm64Test.get().dependsOn(iosTest)
+        iosSimulatorArm64Test.get().dependsOn(iosTest)
 
         commonMain.dependencies {
             // FileStorageEngine implements StorageEngine, KacheSerializer is public

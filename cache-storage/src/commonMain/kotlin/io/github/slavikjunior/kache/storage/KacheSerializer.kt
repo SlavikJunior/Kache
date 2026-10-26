@@ -33,14 +33,10 @@ public class KotlinxJsonSerializer<T>(
     private val serializer: KSerializer<T>
 ) : KacheSerializer<T> {
 
-    override fun serialize(value: T): ByteArray {
-        return try {
+    override fun serialize(value: T): ByteArray = catchingStackOverflow {
+        try {
             json.encodeToString(serializer, value).encodeToByteArray()
         } catch (e: Exception) {
-            throw KacheException.SerializationException(e)
-        } catch (e: StackOverflowError) {
-            // A user-supplied serializer may recurse without bound; that is a formatting
-            // failure too, and must not escape as an Error.
             throw KacheException.SerializationException(e)
         }
     }
@@ -55,14 +51,14 @@ public class KotlinxJsonSerializer<T>(
                 IllegalStateException("JSON nesting deeper than $MAX_NESTING_DEPTH levels"),
             )
         }
-        return try {
-            json.decodeFromString(serializer, bytes.decodeToString())
-        } catch (e: Exception) {
-            throw KacheException.SerializationException(e)
-        } catch (e: StackOverflowError) {
-            // Left for a user-supplied [serializer] that recurses on its own; the bracket
-            // count above only guards the document this class parses itself.
-            throw KacheException.SerializationException(e)
+        // The outer guard covers a user-supplied serializer that recurses on its own; the
+        // bracket count above only guards the document this class parses itself.
+        return catchingStackOverflow {
+            try {
+                json.decodeFromString(serializer, bytes.decodeToString())
+            } catch (e: Exception) {
+                throw KacheException.SerializationException(e)
+            }
         }
     }
 

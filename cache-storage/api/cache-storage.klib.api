@@ -1,0 +1,21 @@
+// Klib ABI Dump
+// Targets: [iosArm64, iosSimulatorArm64]
+// Rendering settings:
+// - Signature version: 2
+// - Show manifest properties: true
+// - Show declarations: true
+
+// Library unique name: <io.github.slavikjunior.kache:cache-storage>
+final class <#A: kotlin/Any?> io.github.slavikjunior.kache.storage/KotlinxJsonSerializer : io.github.slavikjunior.kache.core/KacheSerializer<#A> { // io.github.slavikjunior.kache.storage/KotlinxJsonSerializer|null[0]
+    constructor <init>(kotlinx.serialization/KSerializer<#A>) // io.github.slavikjunior.kache.storage/KotlinxJsonSerializer.<init>|<init>(kotlinx.serialization.KSerializer<1:0>){}[0]
+
+    final fun deserialize(kotlin/ByteArray): #A // io.github.slavikjunior.kache.storage/KotlinxJsonSerializer.deserialize|deserialize(kotlin.ByteArray){}[0]
+    final fun serialize(#A): kotlin/ByteArray // io.github.slavikjunior.kache.storage/KotlinxJsonSerializer.serialize|serialize(1:0){}[0]
+}
+
+final class io.github.slavikjunior.kache.storage/StringSerializer : io.github.slavikjunior.kache.core/KacheSerializer<kotlin/String> { // io.github.slavikjunior.kache.storage/StringSerializer|null[0]
+    constructor <init>() // io.github.slavikjunior.kache.storage/StringSerializer.<init>|<init>(){}[0]
+
+    final fun deserialize(kotlin/ByteArray): kotlin/String // io.github.slavikjunior.kache.storage/StringSerializer.deserialize|deserialize(kotlin.ByteArray){}[0]
+    final fun serialize(kotlin/String): kotlin/ByteArray // io.github.slavikjunior.kache.storage/StringSerializer.serialize|serialize(kotlin.String){}[0]
+}

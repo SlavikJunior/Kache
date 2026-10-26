@@ -21,6 +21,10 @@ apiValidation {
     // Exclude modules without a stable public API or test-only modules
     ignoredPackages.add("io.github.slavikjunior.kache.core.internal")
 
+    // The sample is an app, not a published artifact: its API is not a contract, and a
+    // golden dump would have to be regenerated for every UI change.
+    ignoredProjects.add("sample")
+
     // KLib ABI validation covers the iOS targets. It is disabled by default, which
     // makes `klibApiCheck` report SKIPPED and leaves no golden ABI file behind, so
     // any change to the public API of an iOS target would pass unnoticed.
@@ -224,6 +228,9 @@ val expectedPublishedArtifacts: Map<String, String?> = linkedMapOf(
     "cache-storage" to null,
     "cache-storage-jvm" to null,
     "cache-storage-android" to "aar",
+    // iOS-вариант несёт только сериализаторы: файлового движка на iOS нет.
+    "cache-storage-iosarm64" to "klib",
+    "cache-storage-iossimulatorarm64" to "klib",
     "cache-store-room" to null,
     "cache-store-room-jvm" to null,
     "cache-store-room-android" to "aar",
