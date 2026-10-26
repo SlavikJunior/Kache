@@ -51,8 +51,11 @@ jobs:
       - name: Verify binary compatibility
         run: ./gradlew apiCheck
 
-      - name: Build and lint the sample
-        run: ./gradlew :sample-android:assembleDebug :sample-android:lintDebug
+      # The sample is an app on three platforms: the Android entry point is built and
+      # linted here, and the desktop (JVM) target is compiled so the shared code is proven
+      # to build for a second JVM target as well.
+      - name: Build and lint the Android sample
+        run: ./gradlew :sample-android:assembleDebug :sample-android:lintDebug :sample:desktopJar
 
   ios:
     name: iOS compile, link and simulator tests
@@ -79,7 +82,11 @@ jobs:
             :cache-core:compileKotlinIosSimulatorArm64 \
             :cache-core:compileKotlinIosX64 \
             :cache-store-room:compileKotlinIosArm64 \
-            :cache-store-room:compileKotlinIosSimulatorArm64
+            :cache-store-room:compileKotlinIosSimulatorArm64 \
+            :cache-storage:compileKotlinIosArm64 \
+            :cache-storage:compileKotlinIosSimulatorArm64 \
+            :sample:compileKotlinIosArm64 \
+            :sample:compileKotlinIosSimulatorArm64
 
       - name: Link every iOS target
         run: |
@@ -88,10 +95,19 @@ jobs:
             :cache-core:iosSimulatorArm64MainBinaries \
             :cache-core:iosX64MainBinaries \
             :cache-store-room:iosArm64MainBinaries \
-            :cache-store-room:iosSimulatorArm64MainBinaries
+            :cache-store-room:iosSimulatorArm64MainBinaries \
+            :cache-storage:iosArm64MainBinaries \
+            :cache-storage:iosSimulatorArm64MainBinaries \
+            :sample:linkDebugFrameworkIosArm64 \
+            :sample:linkDebugFrameworkIosSimulatorArm64
 
       - name: Run iOS simulator tests
-        run: ./gradlew :cache-core:iosSimulatorArm64Test :cache-store-room:iosSimulatorArm64Test
+        run: |
+          ./gradlew \
+            :cache-core:iosSimulatorArm64Test \
+            :cache-storage:iosSimulatorArm64Test \
+            :cache-store-room:iosSimulatorArm64Test \
+            :sample:iosSimulatorArm64Test
 
       - name: Verify binary compatibility
         run: ./gradlew apiCheck
