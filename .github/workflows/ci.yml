@@ -125,3 +125,51 @@ jobs:
       - name: Consume the artifacts as an external dependency
         working-directory: verification/consumer
         run: ./gradlew run --console=plain
+
+  instrumented:
+    name: Instrumented Room tests on an emulator
+    # The emulator job exists because `BundledSQLiteDriver` ships JNI built for Android ABIs
+    # and cannot be loaded in a host JVM test. The real driver and `createFromContext` are
+    # therefore covered only here; without this job they are covered by nobody.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Install Android platforms
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;37.0.0"
+
+      # The emulator needs read/write access to /dev/kvm. A udev rule works mid-job, while
+      # adding the user to the kvm group does not: group membership is read at login.
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # A dropped adb connection surfaces as a hung task with an empty failure rather than as
+      # an assertion, so the step carries its own budget as well as the job's.
+      - name: Run the instrumented Room suite
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: ./gradlew :cache-store-room:connectedAndroidDeviceTest
