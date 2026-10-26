@@ -818,14 +818,10 @@ bundled-драйвер SQLite:
 
 ## Статус проекта
 
-`0.1.0`. Реализованы все десять фаз плана: ядро пайплайна, файловый и Room-бэкенды,
+`1.0.0`. Реализованы все десять фаз плана: ядро пайплайна, файловый и Room-бэкенды,
 удобства для Android, публикуемые артефакты, наблюдаемость (`KacheLogger` и панель
 статистики в сэмпле) и аудит безопасности из тринадцати находок, закрытый
-(см. [`SECURITY.md`](SECURITY.md) и [`docs/security-audit.md`](docs/security-audit.md)).
-Что осталось до `1.0.0` — в конце [`docs/BACKLOG.md`](docs/BACKLOG.md).
-Слои модулей, поток данных и спецификация релиза описаны в
-[`docs/`](docs/ARCHITECTURE.md), обещание версии `1.x` — в
-[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md), история версий — в [`CHANGELOG.md`](CHANGELOG.md).
+(см. [`SECURITY.md`](SECURITY.md)). История версий — в [`CHANGELOG.md`](CHANGELOG.md).
 
 ### Покрытие тестами
 
@@ -833,10 +829,11 @@ bundled-драйвер SQLite:
 
 | Модуль | JVM | Android-хост | iOS-симулятор | Android-устройство |
 |---|---:|---:|---:|---:|
-| `:cache-core` | 120 | 120 | 120 | — |
-| `:cache-storage` | 66 | — | — | — |
+| `:cache-core` | 132 | 132 | 132 | — |
+| `:cache-storage` | 98 | 39 | 39 | — |
 | `:cache-store-room` | 23 | 11 | 20 | 20 |
-| `:cache-android` | — | 41 | — | — |
+| `:cache-android` | — | 36 | — | — |
+| `:sample` | 32 (desktop) | 22 | 22 | — |
 
 `:cache-core` гоняет один и тот же набор `commonTest` на трёх хостах, поэтому число там совпадает
 по построению. У `:cache-store-room` один общий контракт (`RoomStorageEngineTestBase`) и тонкие
@@ -848,8 +845,8 @@ bundled-драйвер SQLite:
 - **Android API не покрыт проверкой совместимости ABI.** BCV цепляется за Android-таргет
   KMP только когда его compilation назван `release`, а плагин AGP KMP даёт `main` (проверено
   вплоть до BCV 0.18.1), поэтому `:cache-android` публикует AAR без golden-файла. Пробел
-  смягчён рефлексия-тестом `PublicApiTest`, который фиксирует публичную поверхность, но не
-  устранён.
+  смягчён `AndroidApiSurfaceTest`: он рендерит все публичные классы модуля в
+  `cache-android-api.txt`, но не устранён.
 - `createFromContext` — фабрика Room, которую реально вызывают потребители — проверяется на
   настоящем устройстве набором `RoomStorageEngineAndroidDeviceTest`, где bundled-драйвер
   SQLite загружается по-настоящему. Host-набор так не может: JNI-библиотека драйвера собрана
@@ -874,8 +871,7 @@ bundled-драйвер SQLite:
 - **`KacheException.ExpiredException` удалён.** Его никто не бросал, и это было единственное
   исключение, клавившее ключ кэша в `message` и `toString`. Просроченная запись — это промах,
   а не ошибка. Потребитель, который его ловил, не скомпилируется.
-- Опубликовано в Maven Central как `0.1.0`. Процедура релиза, включая шаги, на которых легко
-  ошибиться, описана в [`docs/RELEASING.md`](docs/RELEASING.md).
+- Опубликовано в Maven Central как `1.0.0`.
 
 ## Лицензия
 

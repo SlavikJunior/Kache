@@ -45,8 +45,10 @@ jobs:
       - name: Install Android platforms
         run: sdkmanager "platform-tools" "platforms;android-36" "platforms;android-37.0" "build-tools;37.0.0"
 
+      # `check` does not reach every host-test task: AGP's KMP host tests are not part of the
+      # lifecycle task, so the sample's 22 Android-host tests ran nowhere unless named here.
       - name: Test JVM, Android host and iOS-simulator sources
-        run: ./gradlew check
+        run: ./gradlew check :sample:testAndroidHostTest
 
       - name: Verify binary compatibility
         run: ./gradlew apiCheck
@@ -112,7 +114,7 @@ jobs:
       # exists. `verifyDocCounts` below therefore verifies every cell and the total; on Linux
       # the same task can only check the cells that ran there, and says so.
       - name: Run tests on every host
-        run: ./gradlew check
+        run: ./gradlew check :sample:testAndroidHostTest
 
       - name: Verify documented test counts
         run: ./gradlew verifyDocCounts

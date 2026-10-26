@@ -331,7 +331,7 @@ val verifyLocalPublication by tasks.registering {
  */
 val verifyDocCounts by tasks.registering {
     group = "verification"
-    description = "Verifies the test counts in README and docs/BACKLOG.md against the test results."
+    description = "Verifies the test counts stated in both READMEs against the test results."
 
     doLast {
         val root = layout.projectDirectory.asFile
@@ -369,12 +369,27 @@ val verifyDocCounts by tasks.registering {
         val violations = mutableListOf<String>()
         val skipped = mutableListOf<String>()
 
-        // docs/BACKLOG.md: the matrix table is the single place the per-module numbers live.
-        val backlog = File(root, "docs/BACKLOG.md")
-        if (!backlog.isFile) {
-            violations += "docs/BACKLOG.md отсутствует"
+        // README.md: the matrix table is the single place the per-module numbers live. It used
+        // to live in a working note outside the repository, so nothing a reader of the
+        // published docs could check was covered by it.
+        val table = File(root, "README.md")
+        if (!table.isFile) {
+            violations += "README.md отсутствует"
         } else {
-            val rows = backlog.readLines().filter { it.startsWith("| `:") }
+            // Only the coverage table: the README has module tables for platforms and for
+            // dependencies too, and their first column is also a module name, so the header
+            // has to match the coverage one in full.
+            val lines = table.readLines()
+            val header = lines.indexOfFirst { it.startsWith("| Module | JVM | Android host | iOS simulator |") }
+            if (header < 0) {
+                violations += "README.md: не найдена таблица покрытия тестами"
+            }
+            val rows = if (header < 0) {
+                emptyList()
+            } else {
+                // +2: the header, then the `|---|` separator row.
+                lines.drop(header + 2).takeWhile { it.startsWith("|") }.filter { it.startsWith("| `:") }
+            }
             val seen = mutableSetOf<String>()
             rows.forEach { row ->
                 val cells = row.split('|').map(String::trim)
@@ -398,7 +413,7 @@ val verifyDocCounts by tasks.registering {
                     }
                 }
             }
-            (measured.keys - seen).forEach { violations += "$it не указан в таблице docs/BACKLOG.md" }
+            (measured.keys - seen).forEach { violations += "$it не указан в таблице README.md" }
         }
 
         val total = measured.values.sumOf { (a, b, c) -> (a ?: 0) + (b ?: 0) + (c ?: 0) }

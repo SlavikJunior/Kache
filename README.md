@@ -819,14 +819,10 @@ device:
 
 ## Project status
 
-`0.1.0`. All ten roadmap phases are implemented: the core pipeline, the file and Room
+`1.0.0`. All ten roadmap phases are implemented: the core pipeline, the file and Room
 backends, the Android conveniences, the publishable artifacts, observability
 (`KacheLogger` plus the sample's statistics panel) and a thirteen-finding security audit closed
-out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](docs/security-audit.md)).
-The work left before `1.0.0` is tracked at the end of [`docs/BACKLOG.md`](docs/BACKLOG.md).
-Module layering, data flow and the release specification are documented in
-[`docs/`](docs/ARCHITECTURE.md), the promise a `1.x` version makes is in
-[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md), and the release history is in
+out (see [`SECURITY.md`](SECURITY.md)). The release history is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 **Test coverage** — 738 tests in the standard matrix, plus a 20-test instrumented suite, green
@@ -834,23 +830,25 @@ on every host:
 
 | Module | JVM | Android host | iOS simulator | Android device |
 |---|---:|---:|---:|---:|
-| `:cache-core` | 120 | 120 | 120 | — |
-| `:cache-storage` | 66 | — | — | — |
+| `:cache-core` | 132 | 132 | 132 | — |
+| `:cache-storage` | 98 | 39 | 39 | — |
 | `:cache-store-room` | 23 | 11 | 20 | 20 |
-| `:cache-android` | — | 41 | — | — |
+| `:cache-android` | — | 36 | — | — |
+| `:sample` | 32 (desktop) | 22 | 22 | — |
 
 `:cache-core` runs one set of `commonTest` sources on all three hosts, so its count is identical
 by construction. `:cache-store-room` has a single shared contract (`RoomStorageEngineTestBase`)
 with thin per-platform subclasses supplying only a factory, so the device suite runs the same
-contract as the host and iOS ones.
+contract as the host and iOS ones. The sample's 32 desktop tests are its 22 `commonTest` tests
+plus 10 ViewModel tests that need a JVM `Dispatchers.Main` override.
 
 **Known gaps, stated plainly:**
 
 - The **Android public API is not covered by binary-compatibility validation.** BCV hooks a
   KMP Android target only when its compilation is named `release`, while the AGP KMP plugin
   names it `main` (checked up to BCV 0.18.1), so `:cache-android` publishes an AAR with no
-  golden API file. The gap is mitigated by a reflection-based `PublicApiTest` that pins the
-  public surface, not closed.
+  golden API file. The gap is mitigated by `AndroidApiSurfaceTest`, which renders every public
+  class of the module into `cache-android-api.txt`, not closed.
 - `createFromContext` — the Room factory consumers actually call — is covered on a real
   device by `RoomStorageEngineAndroidDeviceTest`, which loads the bundled SQLite driver for
   real. The host suite cannot do that: the driver's JNI library is built for Android ABIs.
@@ -875,8 +873,7 @@ contract as the host and iOS ones.
 - **`KacheException.ExpiredException` was removed.** Nothing ever threw it, and it was the one
   exception that put a caller-supplied key into `message` and `toString`. An expired record is
   a miss, not an error. A consumer that caught it will not compile.
-- Published to Maven Central as `0.1.0`. The release procedure, including the steps that are easy
-  to get wrong, is documented in [`docs/RELEASING.md`](docs/RELEASING.md).
+- Published to Maven Central as `1.0.0`.
 
 ## License
 

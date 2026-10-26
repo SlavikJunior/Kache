@@ -2,10 +2,27 @@
 
 All notable changes to this project are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). While the major version is `0`, a
-minor release may contain breaking changes; each one is listed with what a consumer has to do.
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). From `1.0.0` on, a minor release
+only adds: removals and signature changes wait for a major, and a removal is preceded by at
+least one minor release of `@Deprecated`. Pre-`1.0` releases were explicitly allowed to break.
 
-## [Unreleased]
+## [1.0.0] — 2026-10-26
+
+### Migration from 0.1.0
+
+Two source-level changes, both small, and one reason to be glad you are upgrading:
+
+- **`CacheResult.Loading` is gone.** Delete the `is Loading ->` branch from any `when` over
+  `CacheResult`; it was never emitted, so the branch was dead code. Read progress from
+  `CachedState.isLoading` instead (the `KacheStateHolder` view layer exposes it, and keeps the
+  last value while a revalidating strategy refreshes in the background).
+- **Recompile against 1.0.0.** `KacheLogger` became a constructor parameter on the cache
+  factories, which is source-compatible but binary-incompatible: a library built against
+  `0.1.0` must be rebuilt, not just re-resolved.
+- **The file backend now runs on iOS**, without raising `minSdk` anywhere. `FileStorageEngine`
+  is still the same class; `createFromCachesDirectory()` is the iOS counterpart of
+  `createFromContext()`. Records written by `0.1.0` remain readable — the `v2` byte layout did
+  not change.
 
 ### Added
 
