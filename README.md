@@ -819,10 +819,11 @@ device:
 
 ## Project status
 
-`0.1.0`. Nine roadmap phases are defined; eight are implemented and the ninth
-(observability) is deliberately not started. Capacity limits, eviction strategies and
-optional expired-record reaping shipped alongside them, and a thirteen-finding security audit
-is closed out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](docs/security-audit.md)).
+`0.1.0`. All ten roadmap phases are implemented: the core pipeline, the file and Room
+backends, the Android conveniences, the publishable artifacts, observability
+(`KacheLogger` plus the sample's statistics panel) and a thirteen-finding security audit closed
+out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](docs/security-audit.md)).
+The work left before `1.0.0` is tracked at the end of [`docs/BACKLOG.md`](docs/BACKLOG.md).
 Module layering, data flow and the release specification are documented in
 [`docs/`](docs/ARCHITECTURE.md), the promise a `1.x` version makes is in
 [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md), and the release history is in
