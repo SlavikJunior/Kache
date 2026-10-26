@@ -267,6 +267,7 @@ val verifyLocalPublication by tasks.registering {
         }
 
         val violations = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
         val actual = groupDir.listFiles().orEmpty().filter { it.isDirectory }.map { it.name }.toSet()
 
         (expected.keys - actual).sorted().forEach { violations += "$it: публикация отсутствует" }
@@ -321,6 +322,12 @@ val verifyLocalPublication by tasks.registering {
  * they are missing, so "run `verifyDocCounts` on a clean tree" fails loudly instead of
  * comparing against nothing. The Android-device column is not checked: it needs an emulator,
  * which no local run guarantees.
+ *
+ * A cell with no results behind it is skipped and named in the output, because no single
+ * machine produces the whole matrix: Linux has no iOS simulator, and macOS alone has no
+ * Android host run unless `check` is invoked there too. The total is therefore verified only
+ * when every cell was measured — a total derived from half a matrix is a number about nothing.
+ * The authoritative full run is `./gradlew check verifyDocCounts` on macOS.
  */
 val verifyDocCounts by tasks.registering {
     group = "verification"
@@ -360,6 +367,7 @@ val verifyDocCounts by tasks.registering {
         }
 
         val violations = mutableListOf<String>()
+        val skipped = mutableListOf<String>()
 
         // docs/BACKLOG.md: the matrix table is the single place the per-module numbers live.
         val backlog = File(root, "docs/BACKLOG.md")
@@ -380,7 +388,10 @@ val verifyDocCounts by tasks.registering {
                 expected.forEachIndexed { index, cell ->
                     val value = cell.removeSuffix(" (desktop)").takeUnless { it == "—" }?.toInt()
                         ?: return@forEachIndexed
-                    val measuredValue = actual.toList()[index] ?: return@forEachIndexed
+                    val measuredValue = actual.toList()[index] ?: run {
+                        skipped += "$module/${listOf("JVM", "Android host", "iOS sim")[index]}"
+                        return@forEachIndexed
+                    }
                     if (value != measuredValue) {
                         violations += "$module, колонка ${listOf("JVM", "Android host", "iOS sim")[index]}: " +
                             "в таблице $value, реально $measuredValue"
@@ -391,10 +402,18 @@ val verifyDocCounts by tasks.registering {
         }
 
         val total = measured.values.sumOf { (a, b, c) -> (a ?: 0) + (b ?: 0) + (c ?: 0) }
+        if (skipped.isNotEmpty()) {
+            logger.lifecycle(
+                "Пропущено (нет результатов на этой машине): ${skipped.joinToString()}. " +
+                    "Итоговая сумма не проверяется — полная матрица требует macOS: " +
+                    "`./gradlew check verifyDocCounts`.",
+            )
+        }
         listOf("README.md", "README.ru.md").forEach { name ->
             val file = File(root, name)
             if (!file.isFile) return@forEach
             val text = file.readText()
+            if (skipped.isNotEmpty()) return@forEach
             val badge = Regex("""tests-(\d+)%20green""").find(text)?.groupValues?.get(1)?.toInt()
             if (badge != null && badge != total) {
                 violations += "$name: бейдж $badge, реально $total"
@@ -414,6 +433,12 @@ val verifyDocCounts by tasks.registering {
                     "\nЗначения измерены по XML-отчётам: $total в матрице.",
             )
         }
-        logger.lifecycle("Счётчики тестов совпадают с документацией: $total в матрице.")
+        logger.lifecycle(
+            if (skipped.isEmpty()) {
+                "Счётчики тестов совпадают с документацией: $total в матрице."
+            } else {
+                "Счётчики тестов совпадают с документацией в проверенных ячейках ($total на этой машине)."
+            },
+        )
     }
 }
