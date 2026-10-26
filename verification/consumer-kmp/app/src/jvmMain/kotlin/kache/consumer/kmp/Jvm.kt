@@ -8,7 +8,8 @@ import kotlinx.serialization.builtins.serializer
 
 /**
  * JVM-only entry points. `createFromFile` lives in `:cache-store-room`'s `jvmMain`, and
- * `FileStorageEngine` in `:cache-storage`, which is jvm/android-only.
+ * `FileStorageEngine` in `:cache-storage`'s `jvmCommonMain` — the serializers in that module
+ * are published for every target, but the file engine needs `java.io`.
  */
 fun jvmBackends(directoryPath: String): List<StorageEngine> = listOf(
     FileStorageEngine(directoryPath),

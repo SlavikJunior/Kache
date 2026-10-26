@@ -1,19 +1,22 @@
 plugins {
     // AGP 9 has built-in Kotlin support, so no separate Kotlin plugin is needed.
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.serialization)
+    // Compose-код здесь — только `setContent { }`; сам UI приходит из `:sample`.
     alias(libs.plugins.kotlin.compose)
 }
 
+/**
+ * Тонкая Android-точка входа.
+ *
+ * UI, домен и данные живут в `:sample`. Этот модуль существует потому, что AGP 9
+ * запрещает `com.android.application` в одном субпроекте с KMP-плагином: точка входа
+ * обязана быть отдельным модулем. Здесь только `MainActivity`, `Application`,
+ * манифест и тема — ничего, что стоило бы тестировать отдельно.
+ */
 android {
     namespace = "io.github.slavikjunior.kache.sample"
-    // Compose BOM 2026.09.x pulls in libraries that require compileSdk 37.
-    //
-    // Android 37 is minor-versioned and published as `platforms;android-37.0` and
-    // `platforms;android-37.1`, so a bare `compileSdk = 37` resolves to whichever minor
-    // happens to be installed. That makes a developer's machine and CI build against
-    // different platforms. Pinning the minor keeps the two identical, and CI installs
-    // exactly this one.
+    // Compose Multiplatform 1.12 тянет Android-артефакты, собранные против API 36+;
+    // Compose BOM больше не используется, поэтому версия платформы одна на весь проект.
     compileSdk = 37
     compileSdkMinor = 0
 
@@ -31,36 +34,11 @@ android {
     }
 }
 
-// The sample is a plain Android app that consumes the KMP modules through Gradle
-// project dependencies. It intentionally does not depend on `:cache-store-room`: that
-// module is KMP and usable on Android, but the sample stays Room-free to keep the scenario
-// to the file backend. Room on Android is covered by `:cache-store-room`'s instrumented
-// suite instead. `:cache-android` supplies the Android conveniences (Context-based
-// construction, memory-pressure callbacks) and also adds no Room.
 dependencies {
-    implementation(project(":cache-core"))
-    implementation(project(":cache-storage"))
-    implementation(project(":cache-android"))
+    implementation(project(":sample"))
 
-    val composeBom = platform(libs.compose.bom)
-    implementation(composeBom)
-    androidTestImplementation(composeBom)
-
-    implementation(libs.compose.ui)
-    implementation(libs.compose.ui.tooling.preview)
-    implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons.core)
-    implementation(libs.androidx.activity.compose)
-    implementation(libs.androidx.lifecycle.runtime.compose)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-
-    implementation(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.serialization.json)
-
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.android)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.serialization.kotlinx.json)
-
-    debugImplementation(libs.compose.ui.tooling)
+    // Нужен для `setContent` и `enableEdgeToEdge`. Compose BOM намеренно не
+    // подключается: версии Compose задаёт Compose Multiplatform, и второй BOM дал бы
+    // два набора одних и тех же классов в одном classpath.
+    implementation(samplelibs.androidx.activity.compose)
 }

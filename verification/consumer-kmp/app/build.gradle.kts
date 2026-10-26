@@ -18,18 +18,16 @@ kotlin {
     iosSimulatorArm64()
 
     sourceSets {
-        // `cache-store-room` is the only backend with an iOS target, so it is the only one
-        // that can sit in `commonMain`. `cache-storage` is jvm/android-only and is therefore
-        // added to those source sets alone — the rule a consumer has to follow.
+        // Both artifacts are on `commonMain` because both publish a variant for every
+        // target here. `cache-storage` used to be jvm/android-only; its iOS klib carries the
+        // serializers (`KotlinxJsonSerializer`, `StringSerializer`) while `FileStorageEngine`
+        // stays on the JVM side, where `java.io` exists. A consumer that puts the dependency
+        // in `commonMain` and only calls the serializers from common code is the boundary
+        // this harness exists to prove.
         commonMain.dependencies {
             implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
+            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
             implementation("io.github.slavikjunior.kache:cache-store-room:0.1.0")
-        }
-        jvmMain.dependencies {
-            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
-        }
-        androidMain.dependencies {
-            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")
         }
     }
 }

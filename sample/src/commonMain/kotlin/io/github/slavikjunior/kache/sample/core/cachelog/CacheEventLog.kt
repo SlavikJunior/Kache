@@ -8,19 +8,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 
-/** What kind of cache event a line in the panel represents. */
-enum class CacheEventKind { HIT, MISS, FETCH, RETRY, ERROR, EVICTION }
+/**
+ * What kind of cache event a line in the panel represents.
+ *
+ * @property worthSnackbar Whether the event is worth interrupting the user for. A `fetch`
+ *   attempt is not: it fires before a result exists, so a cold read would queue several
+ *   snackbars in a row. Fetch attempts stay in the panel, where they explain the sequence
+ *   without competing with the content.
+ */
+enum class CacheEventKind {
+    HIT,
+    MISS,
+    FETCH,
+    RETRY,
+    ERROR,
+    EVICTION,
+    ;
+
+    val worthSnackbar: Boolean get() = this != FETCH
+}
 
 /**
  * One line of the cache log.
  *
- * @param id Monotonic identifier, used as the list key because two identical events are
- *   still two events.
- * @param message Rendered line. Deliberately assembled from keys and origins only: the
- *   logged cache never contains values, so neither does this.
+ * @param id Monotonic identifier, used as the list key and to tell "an event the UI has
+ *   already shown" from a new one. Two identical events are still two events.
+ * @param message Rendered line. Assembled from keys and origins only: the cache never
+ *   passes values to a logger, so neither does this.
  */
 data class CacheEvent(
     val id: Long,
@@ -52,25 +68,32 @@ data class CacheCounters(
 }
 
 /**
- * In-memory [KacheLogger] that feeds the panel on screen.
+ * Everything [CacheEventLog] exposes, as one value.
  *
- * State is exposed as flows rather than as a mutable list because the cache calls these
- * methods from whichever thread is doing the read or the write, and the screen collects
- * them independently.
+ * One flow instead of three, because the event id has to be assigned atomically with the
+ * event itself. `AtomicLong` would do it, but it is a JVM type and this code is shared
+ * with iOS; the counter lives inside the state that `update { }` already serialises.
+ */
+data class CacheLogState(
+    val events: List<CacheEvent> = emptyList(),
+    val counters: CacheCounters = CacheCounters(),
+    internal val nextId: Long = 0L,
+)
+
+/**
+ * In-memory [KacheLogger] that feeds the panel and the snackbars on screen.
+ *
+ * State is exposed as a flow rather than as a mutable list because the cache calls these
+ * methods from whichever thread is doing the read or the write, and the UI collects them
+ * independently. Every mutation goes through [MutableStateFlow.update], so no lock is
+ * needed and no event can be lost to a race.
  */
 class CacheEventLog(private val capacity: Int = DEFAULT_CAPACITY) : KacheLogger {
 
-    private val nextId = AtomicLong()
+    private val _state = MutableStateFlow(CacheLogState())
 
-    private val _events = MutableStateFlow<List<CacheEvent>>(emptyList())
-
-    /** Most recent events first, capped at `capacity`. */
-    val events: StateFlow<List<CacheEvent>> = _events.asStateFlow()
-
-    private val _counters = MutableStateFlow(CacheCounters())
-
-    /** Running totals since construction or the last [clear]. */
-    val counters: StateFlow<CacheCounters> = _counters.asStateFlow()
+    /** Events and totals since construction or the last [clear]. */
+    val state: StateFlow<CacheLogState> = _state.asStateFlow()
 
     override fun onMiss(key: String, strategy: CacheStrategy) {
         record(CacheEventKind.MISS, "miss · $key · ${strategy.name}") {
@@ -111,18 +134,23 @@ class CacheEventLog(private val capacity: Int = DEFAULT_CAPACITY) : KacheLogger 
 
     /** Forgets the recorded events and the totals, so a demo can start from a clean slate. */
     fun clear() {
-        _events.value = emptyList()
-        _counters.value = CacheCounters()
+        _state.value = CacheLogState()
     }
 
-    private inline fun record(
+    private fun record(
         kind: CacheEventKind,
         message: String,
         counter: (CacheCounters) -> CacheCounters,
     ) {
-        val event = CacheEvent(id = nextId.incrementAndGet(), kind = kind, message = message)
-        _events.update { events -> (listOf(event) + events).take(capacity) }
-        _counters.update(counter)
+        _state.update { state ->
+            val id = state.nextId + 1
+            state.copy(
+                events = (listOf(CacheEvent(id = id, kind = kind, message = message)) + state.events)
+                    .take(capacity),
+                counters = counter(state.counters),
+                nextId = id,
+            )
+        }
     }
 
     private companion object {

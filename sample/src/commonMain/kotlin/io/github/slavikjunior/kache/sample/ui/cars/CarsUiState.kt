@@ -5,9 +5,13 @@ import io.github.slavikjunior.kache.sample.core.cachelog.CacheCounters
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEvent
 import io.github.slavikjunior.kache.sample.domain.model.CarMake
 import io.github.slavikjunior.kache.sample.domain.model.CarModel
+import io.github.slavikjunior.kache.sample.domain.model.CarSpecSheet
+import io.github.slavikjunior.kache.sample.domain.model.LATEST_SPEC_YEAR
+import io.github.slavikjunior.kache.sample.domain.model.SPEC_YEARS
 
 /**
- * One list on screen — makes or models — with what the cache reported about it.
+ * One list on screen — makes, models or specification sheets — with what the cache
+ * reported about it.
  *
  * The origin is part of the state rather than a throwaway event, because it is the answer
  * to the question the sample asks: this list came from disk, from memory or from the
@@ -35,16 +39,27 @@ data class ContentState<T>(
  * The cache log and its counters are part of the state, not of a separate screen: the
  * sample's point is that the cache is observable, and a log nobody watches proves nothing.
  *
+ * Models and specifications are held together with the selection that produced them, so
+ * the screen never has to guess which make a model list belongs to.
+ *
  * @param makes Catalogue of makes, shown as the root screen.
  * @param models Models of [selectedMake]; empty while no make is open.
+ * @param specs Specification sheets of [selectedModel] for [selectedYear].
  * @param selectedMake Make whose models are shown, or null for the catalogue.
+ * @param selectedModel Model whose specifications are shown, or null for the model list.
+ * @param selectedYear Model year requested for [specs].
+ * @param specYears Years offered for selection, newest first.
  * @param log Most recent cache events, newest first.
  * @param counters Totals derived from those events.
  */
 data class CarsUiState(
     val makes: ContentState<CarMake> = ContentState(),
     val models: ContentState<CarModel> = ContentState(),
+    val specs: ContentState<CarSpecSheet> = ContentState(),
     val selectedMake: CarMake? = null,
+    val selectedModel: CarModel? = null,
+    val selectedYear: Int = LATEST_SPEC_YEAR,
+    val specYears: List<Int> = SPEC_YEARS,
     val log: List<CacheEvent> = emptyList(),
     val counters: CacheCounters = CacheCounters(),
 )

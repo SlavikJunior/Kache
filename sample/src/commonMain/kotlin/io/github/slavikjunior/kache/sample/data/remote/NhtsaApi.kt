@@ -1,10 +1,12 @@
 package io.github.slavikjunior.kache.sample.data.remote
 
+import io.github.slavikjunior.kache.sample.data.remote.dto.CanadianSpecsDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.MakeDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.ModelDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.NhtsaResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.url
 import io.ktor.http.appendPathSegments
@@ -31,13 +33,10 @@ internal class NhtsaApi(
 ) : CarRemoteDataSource {
 
     /** Every make that produces passenger cars. */
-    override suspend fun carMakes(): List<MakeDto> = client.get {
-        url {
-            takeFrom(baseUrl)
-            appendPathSegments("api", "vehicles", "GetMakesForVehicleType", CAR_VEHICLE_TYPE)
-            parameters.append(QUERY_FORMAT, "json")
-        }
-    }.body<NhtsaResponse<MakeDto>>().results
+    override suspend fun carMakes(): List<MakeDto> =
+        client.get {
+            endpoint("GetMakesForVehicleType", CAR_VEHICLE_TYPE)
+        }.body<NhtsaResponse<MakeDto>>().results
 
     /**
      * Models produced by [makeName].
@@ -45,17 +44,48 @@ internal class NhtsaApi(
      * The name goes through [appendPathSegments], so a make such as `ASTON MARTIN` is
      * encoded rather than pasted into the path.
      */
-    override suspend fun modelsForMake(makeName: String): List<ModelDto> = client.get {
+    override suspend fun modelsForMake(makeName: String): List<ModelDto> =
+        client.get {
+            endpoint("GetModelsForMake", makeName)
+        }.body<NhtsaResponse<ModelDto>>().results
+
+    /**
+     * Canadian Vehicle Specifications for [makeName] and [modelName] in [year].
+     *
+     * Unlike the other two endpoints this one is queried by parameters, not by path
+     * segments: the model name may contain spaces and body/engine suffixes, which the
+     * service expects verbatim in a query value.
+     */
+    override suspend fun specificationsFor(
+        makeName: String,
+        modelName: String,
+        year: Int,
+    ): List<CanadianSpecsDto> = client.get {
+        endpoint("GetCanadianVehicleSpecifications")
+        url {
+            parameters.append("Year", year.toString())
+            parameters.append("Make", makeName)
+            parameters.append("Model", modelName)
+            parameters.append("units", METRIC_UNITS)
+        }
+    }.body<NhtsaResponse<CanadianSpecsDto>>().results
+
+    /** Builds `{baseUrl}/api/vehicles/{method}/{segments…}?format=json`. */
+    private fun HttpRequestBuilder.endpoint(method: String, vararg segments: String) {
         url {
             takeFrom(baseUrl)
-            appendPathSegments("api", "vehicles", "GetModelsForMake", makeName)
-            parameters.append(QUERY_FORMAT, "json")
+            appendPathSegments("api", "vehicles", method, *segments)
+            parameters.append(QUERY_FORMAT, FORMAT_JSON)
         }
-    }.body<NhtsaResponse<ModelDto>>().results
+    }
 
     private companion object {
         const val DEFAULT_BASE_URL = "https://vpic.nhtsa.dot.gov"
         const val CAR_VEHICLE_TYPE = "car"
         const val QUERY_FORMAT = "format"
+        const val FORMAT_JSON = "json"
+
+        /** Metric keeps the table in cm/kg, which is what the UI labels claim. */
+        const val METRIC_UNITS = "Metric"
     }
 }

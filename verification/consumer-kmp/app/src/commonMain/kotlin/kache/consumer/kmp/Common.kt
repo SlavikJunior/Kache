@@ -4,6 +4,8 @@ import io.github.slavikjunior.kache.core.ChainKmpCache
 import io.github.slavikjunior.kache.core.KacheSerializer
 import io.github.slavikjunior.kache.core.L1MemoryCache
 import io.github.slavikjunior.kache.core.StorageEngine
+import io.github.slavikjunior.kache.storage.KotlinxJsonSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -19,3 +21,12 @@ fun <V : Any> twoTierCache(engine: StorageEngine, serializer: KacheSerializer<V>
         l2Storage = engine,
         serializer = serializer,
     )
+
+/**
+ * `KotlinxJsonSerializer` from `:cache-storage` in *common* code.
+ *
+ * This is what the iOS artifact of `:cache-storage` is published for: without it, an iOS
+ * consumer of `:cache-store-room` would have to implement `KacheSerializer` itself. If the
+ * iOS klib ever stops carrying the serializers, this line stops compiling.
+ */
+val commonSerializer = KotlinxJsonSerializer(String.serializer())

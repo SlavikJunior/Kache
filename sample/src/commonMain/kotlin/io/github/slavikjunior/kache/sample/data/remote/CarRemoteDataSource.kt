@@ -1,5 +1,6 @@
 package io.github.slavikjunior.kache.sample.data.remote
 
+import io.github.slavikjunior.kache.sample.data.remote.dto.CanadianSpecsDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.MakeDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.ModelDto
 
@@ -21,4 +22,13 @@ internal interface CarRemoteDataSource {
 
     /** Models produced by [makeName]. */
     suspend fun modelsForMake(makeName: String): List<ModelDto>
+
+    /**
+     * Canadian Vehicle Specifications for one model and model year.
+     *
+     * A model year is required because the source is a per-year compilation: the same
+     * name means different vehicles in 1998 and 2026. The list may be empty — the dataset
+     * does not cover every model/year combination.
+     */
+    suspend fun specificationsFor(makeName: String, modelName: String, year: Int): List<CanadianSpecsDto>
 }

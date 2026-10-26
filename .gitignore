@@ -15,6 +15,10 @@ verification/consumer-kmp/build/
 verification/consumer-kmp/app/build/
 verification/consumer-kmp/iosx64/build/
 
+# Xcode: проект и Info.plist генерируются xcodegen из iosApp/project.yml.
+iosApp/iosApp.xcodeproj/
+iosApp/iosApp/Info.plist
+
 # IDE / OS мусор
 *.hprof
 .kotlin/sessions/

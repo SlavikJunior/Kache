@@ -51,3 +51,23 @@ internal data class ModelDto(
     @SerialName("Model_ID") val id: Int,
     @SerialName("Model_Name") val name: String,
 )
+
+/**
+ * One row of `GetCanadianVehicleSpecifications`.
+ *
+ * The endpoint returns dimensions as an array of name/value pairs rather than named
+ * fields, so the payload cannot be typed per dimension: [NameValueDto.name] is a code
+ * (`OL`, `WB`, `CW`, …) that
+ * [io.github.slavikjunior.kache.sample.data.mapper.toDomain] translates.
+ */
+@Serializable
+internal data class CanadianSpecsDto(
+    @SerialName("Specs") val specs: List<NameValueDto> = emptyList(),
+)
+
+/** One dimension of a Canadian Vehicle Specifications row. */
+@Serializable
+internal data class NameValueDto(
+    @SerialName("Name") val name: String,
+    @SerialName("Value") val value: String,
+)

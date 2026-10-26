@@ -1,0 +1,40 @@
+# Каталог зависимостей ТОЛЬКО для сэмпла.
+#
+# Отдельный файл, а не секция в `gradle/libs.versions.toml`: каталог библиотеки
+# описывает то, что публикуется в Maven Central, и посторонние артефакты в нём
+# опасны. Compose Multiplatform, Ktor, androidx.activity и JetBrains-форки lifecycle
+# нужны исключительно приложению-примеру; библиотека кеша ничего из этого не
+# использует и не должна тянуть транзитивно.
+#
+# Подключается в settings.gradle.kts как отдельный каталог `samplelibs`.
+#
+# Плагины Kotlin (`kotlin.compose`, `kotlin.serialization`) остаются в основном
+# каталоге: это инструменты компилятора, общие для всех модулей, а не зависимости.
+
+[versions]
+compose-multiplatform = "1.12.2"
+ktor = "3.6.0"
+androidx-activity = "1.13.0"
+jetbrains-lifecycle = "2.11.0"
+
+[libraries]
+# Android-точка входа. Composition UI приходит из общего модуля, поэтому BOM и
+# остальные Compose-артефакты здесь не объявляются: CMP несёт свои версии, и
+# подмешивание androidx BOM дало бы два набора Compose в одном classpath.
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
+
+# JetBrains-форки lifecycle: те же API, что в androidx, но с KMP-вариантами.
+# androidx-артефакты не годятся — у них нет iOS-варианта.
+jetbrains-lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jetbrains-lifecycle" }
+jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jetbrains-lifecycle" }
+
+# Сетевой клиент сэмпла. Движок — по платформе, общие части — в commonMain.
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
+ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+
+[plugins]
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
