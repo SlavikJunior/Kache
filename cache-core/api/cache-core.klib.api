@@ -62,6 +62,20 @@ abstract interface <#A: kotlin/Any?> io.github.slavikjunior.kache.core/KacheSeri
     abstract fun serialize(#A): kotlin/ByteArray // io.github.slavikjunior.kache.core/KacheSerializer.serialize|serialize(1:0){}[0]
 }
 
+abstract interface io.github.slavikjunior.kache.core/KacheLogger { // io.github.slavikjunior.kache.core/KacheLogger|null[0]
+    open fun onError(kotlin/String, io.github.slavikjunior.kache.core/KacheException) // io.github.slavikjunior.kache.core/KacheLogger.onError|onError(kotlin.String;io.github.slavikjunior.kache.core.KacheException){}[0]
+    open fun onEvict(kotlin/String) // io.github.slavikjunior.kache.core/KacheLogger.onEvict|onEvict(kotlin.String){}[0]
+    open fun onFetch(kotlin/String, kotlin/Int) // io.github.slavikjunior.kache.core/KacheLogger.onFetch|onFetch(kotlin.String;kotlin.Int){}[0]
+    open fun onHit(kotlin/String, io.github.slavikjunior.kache.core/CacheOrigin) // io.github.slavikjunior.kache.core/KacheLogger.onHit|onHit(kotlin.String;io.github.slavikjunior.kache.core.CacheOrigin){}[0]
+    open fun onMiss(kotlin/String, io.github.slavikjunior.kache.core/CacheStrategy) // io.github.slavikjunior.kache.core/KacheLogger.onMiss|onMiss(kotlin.String;io.github.slavikjunior.kache.core.CacheStrategy){}[0]
+    open fun onRetry(kotlin/String, kotlin/Int, kotlin.time/Duration) // io.github.slavikjunior.kache.core/KacheLogger.onRetry|onRetry(kotlin.String;kotlin.Int;kotlin.time.Duration){}[0]
+
+    final object Companion { // io.github.slavikjunior.kache.core/KacheLogger.Companion|null[0]
+        final val None // io.github.slavikjunior.kache.core/KacheLogger.Companion.None|{}None[0]
+            final fun <get-None>(): io.github.slavikjunior.kache.core/KacheLogger // io.github.slavikjunior.kache.core/KacheLogger.Companion.None.<get-None>|<get-None>(){}[0]
+    }
+}
+
 abstract interface io.github.slavikjunior.kache.core/StorageEngine { // io.github.slavikjunior.kache.core/StorageEngine|null[0]
     abstract suspend fun clear() // io.github.slavikjunior.kache.core/StorageEngine.clear|clear(){}[0]
     abstract suspend fun get(kotlin/String): io.github.slavikjunior.kache.core/StorageRecord<*>? // io.github.slavikjunior.kache.core/StorageEngine.get|get(kotlin.String){}[0]
@@ -160,7 +174,7 @@ sealed interface io.github.slavikjunior.kache.core/RetryPolicy { // io.github.sl
 }
 
 final class <#A: kotlin/Any, #B: kotlin/Any> io.github.slavikjunior.kache.core/L2KmpCache : io.github.slavikjunior.kache.core/KmpCache<#A, #B> { // io.github.slavikjunior.kache.core/L2KmpCache|null[0]
-    constructor <init>(io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/TimeSource = ..., io.github.slavikjunior.kache.core/RetryPolicy = ..., kotlin/Long? = ..., io.github.slavikjunior.kache.core/EvictionStrategy = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ...) // io.github.slavikjunior.kache.core/L2KmpCache.<init>|<init>(io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.time.Duration?;io.github.slavikjunior.kache.core.TimeSource;io.github.slavikjunior.kache.core.RetryPolicy;kotlin.Long?;io.github.slavikjunior.kache.core.EvictionStrategy;kotlin.time.Duration;kotlin.time.Duration?){}[0]
+    constructor <init>(io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/TimeSource = ..., io.github.slavikjunior.kache.core/RetryPolicy = ..., kotlin/Long? = ..., io.github.slavikjunior.kache.core/EvictionStrategy = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/KacheLogger = ...) // io.github.slavikjunior.kache.core/L2KmpCache.<init>|<init>(io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.time.Duration?;io.github.slavikjunior.kache.core.TimeSource;io.github.slavikjunior.kache.core.RetryPolicy;kotlin.Long?;io.github.slavikjunior.kache.core.EvictionStrategy;kotlin.time.Duration;kotlin.time.Duration?;io.github.slavikjunior.kache.core.KacheLogger){}[0]
 
     final fun get(#A, io.github.slavikjunior.kache.core/CacheStrategy, kotlin.coroutines/SuspendFunction1<#A, #B>?): kotlinx.coroutines.flow/Flow<io.github.slavikjunior.kache.core/CacheResult<#B>> // io.github.slavikjunior.kache.core/L2KmpCache.get|get(1:0;io.github.slavikjunior.kache.core.CacheStrategy;kotlin.coroutines.SuspendFunction1<1:0,1:1>?){}[0]
     final fun stopAutoReap() // io.github.slavikjunior.kache.core/L2KmpCache.stopAutoReap|stopAutoReap(){}[0]
@@ -170,7 +184,7 @@ final class <#A: kotlin/Any, #B: kotlin/Any> io.github.slavikjunior.kache.core/L
 }
 
 final class <#A: kotlin/Any?, #B: kotlin/Any?> io.github.slavikjunior.kache.core/ChainKmpCache : io.github.slavikjunior.kache.core/KmpCache<#A, #B> { // io.github.slavikjunior.kache.core/ChainKmpCache|null[0]
-    constructor <init>(io.github.slavikjunior.kache.core/L1MemoryCache<#A, #B>, io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/RetryPolicy = ..., kotlin/Long? = ..., io.github.slavikjunior.kache.core/EvictionStrategy = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ...) // io.github.slavikjunior.kache.core/ChainKmpCache.<init>|<init>(io.github.slavikjunior.kache.core.L1MemoryCache<1:0,1:1>;io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.time.Duration?;io.github.slavikjunior.kache.core.RetryPolicy;kotlin.Long?;io.github.slavikjunior.kache.core.EvictionStrategy;kotlin.time.Duration;kotlin.time.Duration?){}[0]
+    constructor <init>(io.github.slavikjunior.kache.core/L1MemoryCache<#A, #B>, io.github.slavikjunior.kache.core/StorageEngine, io.github.slavikjunior.kache.core/KacheSerializer<#B>, kotlin/Function1<#A, kotlin/String> = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/RetryPolicy = ..., kotlin/Long? = ..., io.github.slavikjunior.kache.core/EvictionStrategy = ..., kotlin.time/Duration = ..., kotlin.time/Duration? = ..., io.github.slavikjunior.kache.core/KacheLogger = ...) // io.github.slavikjunior.kache.core/ChainKmpCache.<init>|<init>(io.github.slavikjunior.kache.core.L1MemoryCache<1:0,1:1>;io.github.slavikjunior.kache.core.StorageEngine;io.github.slavikjunior.kache.core.KacheSerializer<1:1>;kotlin.Function1<1:0,kotlin.String>;kotlin.time.Duration?;io.github.slavikjunior.kache.core.RetryPolicy;kotlin.Long?;io.github.slavikjunior.kache.core.EvictionStrategy;kotlin.time.Duration;kotlin.time.Duration?;io.github.slavikjunior.kache.core.KacheLogger){}[0]
 
     final fun get(#A, io.github.slavikjunior.kache.core/CacheStrategy, kotlin.coroutines/SuspendFunction1<#A, #B>?): kotlinx.coroutines.flow/Flow<io.github.slavikjunior.kache.core/CacheResult<#B>> // io.github.slavikjunior.kache.core/ChainKmpCache.get|get(1:0;io.github.slavikjunior.kache.core.CacheStrategy;kotlin.coroutines.SuspendFunction1<1:0,1:1>?){}[0]
     final fun stopAutoReap() // io.github.slavikjunior.kache.core/ChainKmpCache.stopAutoReap|stopAutoReap(){}[0]

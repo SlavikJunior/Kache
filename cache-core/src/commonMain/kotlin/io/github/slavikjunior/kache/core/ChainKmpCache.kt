@@ -35,6 +35,9 @@ import kotlin.time.Duration
  * @param autoReapEvery How often expired records are deleted from both tiers, or null to
  *   never delete them on a schedule. Enabling it starts a coroutine that lives as long as
  *   this cache, so a cache configured this way is expected to be long-lived.
+ * @param logger Observer for hits, misses, fetch attempts, retries, errors and evictions.
+ *   Defaults to a no-op logger, so a cache that was not asked to report anything stays as
+ *   quiet as it was before.
  */
 public class ChainKmpCache<K, V>(
     private val l1Cache: L1MemoryCache<K, V>,
@@ -47,6 +50,7 @@ public class ChainKmpCache<K, V>(
     evictionStrategy: EvictionStrategy = EvictionStrategy.LRU,
     touchGranularity: Duration = StorageMaintenance.DEFAULT_TOUCH_GRANULARITY,
     private val autoReapEvery: Duration? = null,
+    private val logger: KacheLogger = KacheLogger.None,
 ) : KmpCache<K, V> {
 
     private val maintenance = StorageMaintenance(
@@ -56,6 +60,7 @@ public class ChainKmpCache<K, V>(
         evictionStrategy = evictionStrategy,
         touchGranularity = touchGranularity,
         autoReapEvery = autoReapEvery,
+        logger = logger,
     )
 
     private val tier = ChainTier(l1Cache, l2Storage, serializer, keyToString, maintenance)
@@ -64,6 +69,8 @@ public class ChainKmpCache<K, V>(
         tier = tier,
         defaultTtl = defaultTtl,
         retryPolicy = retryPolicy,
+        keyToString = keyToString,
+        logger = logger,
     )
 
     /**

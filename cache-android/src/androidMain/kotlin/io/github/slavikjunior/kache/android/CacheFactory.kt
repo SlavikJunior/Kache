@@ -3,6 +3,7 @@ package io.github.slavikjunior.kache.android
 import android.content.Context
 import kotlin.time.Duration
 import io.github.slavikjunior.kache.core.EvictionStrategy
+import io.github.slavikjunior.kache.core.KacheLogger
 import io.github.slavikjunior.kache.core.KacheSerializer
 import io.github.slavikjunior.kache.core.L2KmpCache
 import io.github.slavikjunior.kache.core.RetryPolicy
@@ -49,6 +50,7 @@ public const val DEFAULT_CACHE_DIR_NAME: String = "kache"
  *   on a schedule. Enabling it starts a coroutine that lives as long as the cache, so only
  *   set it on a cache that outlives every screen, and call
  *   [L2KmpCache.stopAutoReap] if that stops being true.
+ * @param logger Observer for hits, misses, fetch attempts, retries, errors and evictions.
  */
 public fun <V : Any> l2Cache(
     storageEngine: StorageEngine,
@@ -59,6 +61,7 @@ public fun <V : Any> l2Cache(
     maxSize: Long? = null,
     evictionStrategy: EvictionStrategy = EvictionStrategy.LRU,
     autoReapEvery: Duration? = null,
+    logger: KacheLogger = KacheLogger.None,
 ): L2KmpCache<String, V> = L2KmpCache(
     storageEngine = storageEngine,
     valueSerializer = serializer,
@@ -68,6 +71,7 @@ public fun <V : Any> l2Cache(
     maxSize = maxSize,
     evictionStrategy = evictionStrategy,
     autoReapEvery = autoReapEvery,
+    logger = logger,
 )
 
 /**
@@ -95,6 +99,7 @@ public fun <V : Any> l2Cache(
  * @param evictionStrategy Which records a write drops first once [maxSize] is exceeded.
  * @param autoReapEvery How often expired records are deleted, or null to never delete them
  *   on a schedule.
+ * @param logger Observer for hits, misses, fetch attempts, retries, errors and evictions.
  */
 public fun <V : Any> l2Cache(
     context: Context,
@@ -106,6 +111,7 @@ public fun <V : Any> l2Cache(
     maxSize: Long? = null,
     evictionStrategy: EvictionStrategy = EvictionStrategy.LRU,
     autoReapEvery: Duration? = null,
+    logger: KacheLogger = KacheLogger.None,
 ): L2KmpCache<String, V> = l2Cache(
     storageEngine = createFromContext(context, cacheDirName),
     serializer = serializer,
@@ -115,4 +121,5 @@ public fun <V : Any> l2Cache(
     maxSize = maxSize,
     evictionStrategy = evictionStrategy,
     autoReapEvery = autoReapEvery,
+    logger = logger,
 )

@@ -30,6 +30,7 @@ import kotlin.time.Duration.Companion.minutes
  *   read updates it. Ignored while [maxSize] is unset, since nothing would read the result.
  * @param autoReapEvery How often expired records are deleted, or null to never delete them
  *   on a schedule.
+ * @param logger Observer notified when a record is dropped to stay within [maxSize].
  */
 internal class StorageMaintenance(
     private val storageEngine: StorageEngine,
@@ -38,6 +39,7 @@ internal class StorageMaintenance(
     private val evictionStrategy: EvictionStrategy = EvictionStrategy.LRU,
     private val touchGranularity: Duration = DEFAULT_TOUCH_GRANULARITY,
     private val autoReapEvery: Duration? = null,
+    private val logger: KacheLogger = KacheLogger.None,
 ) {
 
     private var reaperJob: Job? = null
@@ -118,7 +120,10 @@ internal class StorageMaintenance(
         for (key in candidates) {
             if (excess <= 0) break
             if (key == protectedKey) continue
-            if (storageEngine.remove(key)) excess--
+            if (storageEngine.remove(key)) {
+                excess--
+                logger.onEvict(key)
+            }
         }
     }
 

@@ -47,9 +47,9 @@ class PublicApiTest {
 
         val expected = listOf(
             // Engine overload: ownership stays with the caller.
-            "StorageEngine,KacheSerializer,Duration,RetryPolicy,TimeSource,Long,EvictionStrategy,Duration",
+            "StorageEngine,KacheSerializer,Duration,RetryPolicy,TimeSource,Long,EvictionStrategy,Duration,KacheLogger",
             // Context overload: builds the file engine itself.
-            "Context,KacheSerializer,Duration,String,RetryPolicy,TimeSource,Long,EvictionStrategy,Duration",
+            "Context,KacheSerializer,Duration,String,RetryPolicy,TimeSource,Long,EvictionStrategy,Duration,KacheLogger",
         ).sorted()
 
         assertEquals(expected, actual, "l2Cache overloads changed")

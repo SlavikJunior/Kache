@@ -83,8 +83,8 @@ public final class io/github/slavikjunior/kache/core/CachedState {
 }
 
 public final class io/github/slavikjunior/kache/core/ChainKmpCache : io/github/slavikjunior/kache/core/KmpCache {
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lio/github/slavikjunior/kache/core/KacheLogger;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/L1MemoryCache;Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lio/github/slavikjunior/kache/core/KacheLogger;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/Object;Lio/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
 	public fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
@@ -140,6 +140,29 @@ public final class io/github/slavikjunior/kache/core/KacheException$UnknownKache
 	public fun getCause ()Ljava/lang/Throwable;
 }
 
+public abstract interface class io/github/slavikjunior/kache/core/KacheLogger {
+	public static final field Companion Lio/github/slavikjunior/kache/core/KacheLogger$Companion;
+	public fun onError (Ljava/lang/String;Lio/github/slavikjunior/kache/core/KacheException;)V
+	public fun onEvict (Ljava/lang/String;)V
+	public fun onFetch (Ljava/lang/String;I)V
+	public fun onHit (Ljava/lang/String;Lio/github/slavikjunior/kache/core/CacheOrigin;)V
+	public fun onMiss (Ljava/lang/String;Lio/github/slavikjunior/kache/core/CacheStrategy;)V
+	public fun onRetry-SxA4cEA (Ljava/lang/String;IJ)V
+}
+
+public final class io/github/slavikjunior/kache/core/KacheLogger$Companion {
+	public final fun getNone ()Lio/github/slavikjunior/kache/core/KacheLogger;
+}
+
+public final class io/github/slavikjunior/kache/core/KacheLogger$DefaultImpls {
+	public static fun onError (Lio/github/slavikjunior/kache/core/KacheLogger;Ljava/lang/String;Lio/github/slavikjunior/kache/core/KacheException;)V
+	public static fun onEvict (Lio/github/slavikjunior/kache/core/KacheLogger;Ljava/lang/String;)V
+	public static fun onFetch (Lio/github/slavikjunior/kache/core/KacheLogger;Ljava/lang/String;I)V
+	public static fun onHit (Lio/github/slavikjunior/kache/core/KacheLogger;Ljava/lang/String;Lio/github/slavikjunior/kache/core/CacheOrigin;)V
+	public static fun onMiss (Lio/github/slavikjunior/kache/core/KacheLogger;Ljava/lang/String;Lio/github/slavikjunior/kache/core/CacheStrategy;)V
+	public static fun onRetry-SxA4cEA (Lio/github/slavikjunior/kache/core/KacheLogger;Ljava/lang/String;IJ)V
+}
+
 public abstract interface class io/github/slavikjunior/kache/core/KacheSerializer {
 	public abstract fun deserialize ([B)Ljava/lang/Object;
 	public abstract fun serialize (Ljava/lang/Object;)[B
@@ -183,8 +206,8 @@ public final class io/github/slavikjunior/kache/core/L1MemoryCache {
 }
 
 public final class io/github/slavikjunior/kache/core/L2KmpCache : io/github/slavikjunior/kache/core/KmpCache {
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lio/github/slavikjunior/kache/core/KacheLogger;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Lio/github/slavikjunior/kache/core/StorageEngine;Lio/github/slavikjunior/kache/core/KacheSerializer;Lkotlin/jvm/functions/Function1;Lkotlin/time/Duration;Lio/github/slavikjunior/kache/core/TimeSource;Lio/github/slavikjunior/kache/core/RetryPolicy;Ljava/lang/Long;Lio/github/slavikjunior/kache/core/EvictionStrategy;JLkotlin/time/Duration;Lio/github/slavikjunior/kache/core/KacheLogger;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 	public fun get (Ljava/lang/Object;Lio/github/slavikjunior/kache/core/CacheStrategy;Lkotlin/jvm/functions/Function2;)Lkotlinx/coroutines/flow/Flow;
 	public fun invalidate (Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

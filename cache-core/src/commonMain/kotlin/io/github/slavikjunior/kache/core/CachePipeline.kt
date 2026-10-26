@@ -84,11 +84,16 @@ internal class TieredValue<V>(
  * @param defaultTtl How long entries stay fresh when a write carries no TTL. Null means
  *   entries never expire.
  * @param retryPolicy How a failing fetcher is retried.
+ * @param keyToString Maps a key to the string reported to the [logger]. The same mapping
+ *   the tier uses for storage, so log lines and records agree on what a key is.
+ * @param logger Observer for hits, misses, attempts, retries, errors and evictions.
  */
 internal class CachePipeline<K, V>(
     private val tier: CacheTier<K, V>,
     private val defaultTtl: Duration?,
     private val retryPolicy: RetryPolicy,
+    private val keyToString: (K) -> String = { it.toString() },
+    private val logger: KacheLogger = KacheLogger.None,
 ) {
 
     /**
@@ -117,7 +122,7 @@ internal class CachePipeline<K, V>(
      * receives data it would have to discard.
      */
     private fun cacheFirst(key: K, fetcher: (suspend (K) -> V)?): Flow<CacheResult<V>> = flow {
-        read(key, allowStale = false)?.let { cached ->
+        read(key, allowStale = false, strategy = CacheStrategy.CacheFirst)?.let { cached ->
             emit(CacheResult.Success(cached.value, cached.origin))
             return@flow
         }
@@ -127,8 +132,8 @@ internal class CachePipeline<K, V>(
                 write(key, outcome.value)
                 emit(CacheResult.Success(outcome.value, CacheOrigin.NETWORK))
             }
-            is FetchOutcome.Failure -> emit(CacheResult.Error(KacheException.NetworkException(outcome.cause)))
-            FetchOutcome.Absent -> emit(CacheResult.Error(KacheException.CacheMissException(NO_FETCHER_MESSAGE)))
+            is FetchOutcome.Failure -> emit(error(key, KacheException.NetworkException(outcome.cause)))
+            FetchOutcome.Absent -> emit(error(key, KacheException.CacheMissException(NO_FETCHER_MESSAGE)))
         }
     }
 
@@ -148,12 +153,12 @@ internal class CachePipeline<K, V>(
             is FetchOutcome.Failure, FetchOutcome.Absent -> Unit
         }
 
-        read(key, allowStale = false)?.let { cached ->
+        read(key, allowStale = false, strategy = CacheStrategy.NetworkFirst)?.let { cached ->
             emit(CacheResult.Success(cached.value, cached.origin))
             return@flow
         }
 
-        emit(CacheResult.Error(KacheException.CacheMissException(NO_DATA_AFTER_FETCH_MESSAGE)))
+        emit(error(key, KacheException.CacheMissException(NO_DATA_AFTER_FETCH_MESSAGE)))
     }
 
     /**
@@ -164,7 +169,7 @@ internal class CachePipeline<K, V>(
      * fetch failure is only surfaced when there is no cached value to fall back on.
      */
     private fun cacheAndNetwork(key: K, fetcher: (suspend (K) -> V)?): Flow<CacheResult<V>> = flow {
-        val cached = read(key, allowStale = false)
+        val cached = read(key, allowStale = false, strategy = CacheStrategy.CacheAndNetwork)
         if (cached != null) {
             emit(CacheResult.Success(cached.value, cached.origin))
         }
@@ -175,10 +180,10 @@ internal class CachePipeline<K, V>(
                 emit(CacheResult.Success(outcome.value, CacheOrigin.NETWORK))
             }
             is FetchOutcome.Failure -> if (cached == null) {
-                emit(CacheResult.Error(KacheException.NetworkException(outcome.cause)))
+                emit(error(key, KacheException.NetworkException(outcome.cause)))
             }
             FetchOutcome.Absent -> if (cached == null) {
-                emit(CacheResult.Error(KacheException.CacheMissException(NO_FETCHER_MESSAGE)))
+                emit(error(key, KacheException.CacheMissException(NO_FETCHER_MESSAGE)))
             }
         }
     }
@@ -191,7 +196,7 @@ internal class CachePipeline<K, V>(
      * replaces it, a failed one leaves it in place for the next attempt.
      */
     private fun staleWhileRevalidate(key: K, fetcher: (suspend (K) -> V)?): Flow<CacheResult<V>> = flow {
-        val cached = read(key, allowStale = true)
+        val cached = read(key, allowStale = true, strategy = CacheStrategy.StaleWhileRevalidate)
         if (cached != null) {
             emit(CacheResult.Success(cached.value, cached.origin))
         }
@@ -202,15 +207,35 @@ internal class CachePipeline<K, V>(
                 emit(CacheResult.Success(outcome.value, CacheOrigin.NETWORK))
             }
             is FetchOutcome.Failure -> if (cached == null) {
-                emit(CacheResult.Error(KacheException.NetworkException(outcome.cause)))
+                emit(error(key, KacheException.NetworkException(outcome.cause)))
             }
             FetchOutcome.Absent -> if (cached == null) {
-                emit(CacheResult.Error(KacheException.CacheMissException(NO_FETCHER_MESSAGE)))
+                emit(error(key, KacheException.CacheMissException(NO_FETCHER_MESSAGE)))
             }
         }
     }
 
-    private suspend fun read(key: K, allowStale: Boolean): TieredValue<V>? = tier.read(key, allowStale)
+    /**
+     * Reads through the tier and reports the outcome to [logger].
+     *
+     * Hit and miss are reported here rather than in each strategy so that every strategy
+     * reports them in the same terms, and a strategy added later cannot forget to.
+     */
+    private suspend fun read(key: K, allowStale: Boolean, strategy: CacheStrategy): TieredValue<V>? {
+        val cached = tier.read(key, allowStale)
+        if (cached == null) {
+            logger.onMiss(keyToString(key), strategy)
+        } else {
+            logger.onHit(keyToString(key), cached.origin)
+        }
+        return cached
+    }
+
+    /** Builds the error result and reports it, so no failure path can stay invisible. */
+    private fun error(key: K, error: KacheException): CacheResult<V> {
+        logger.onError(keyToString(key), error)
+        return CacheResult.Error(error)
+    }
 
     private suspend fun write(key: K, value: V) {
         tier.write(key, value, defaultTtl)
@@ -226,8 +251,10 @@ internal class CachePipeline<K, V>(
     private suspend fun fetch(key: K, fetcher: (suspend (K) -> V)?): FetchOutcome<V> {
         if (fetcher == null) return FetchOutcome.Absent
 
+        val stringKey = keyToString(key)
         var completedAttempts = 0
         while (true) {
+            logger.onFetch(stringKey, completedAttempts + 1)
             try {
                 return FetchOutcome.Success(fetcher(key))
             } catch (e: CancellationException) {
@@ -237,6 +264,7 @@ internal class CachePipeline<K, V>(
                 if (!retryPolicy.shouldRetry(completedAttempts)) return FetchOutcome.Failure(e)
 
                 val retryDelay = retryPolicy.delayAfter(completedAttempts)
+                logger.onRetry(stringKey, failedAttempt = completedAttempts, delay = retryDelay)
                 if (retryDelay > Duration.ZERO) delay(retryDelay)
             }
         }

@@ -108,6 +108,27 @@ class ReadmeSnippetCheck {
             autoReapEvery = 10.minutes,
         )
 
+    /** The logger recipe: a partial implementation, relying on the no-op defaults. */
+    private fun recipe12(engine: StorageEngine): L2KmpCache<String, String> {
+        val hitRatio = object : KacheLogger {
+            var hits = 0
+            var misses = 0
+
+            override fun onHit(key: String, origin: CacheOrigin) {
+                hits++
+            }
+
+            override fun onMiss(key: String, strategy: CacheStrategy) {
+                misses++
+            }
+        }
+        return L2KmpCache(
+            storageEngine = engine,
+            valueSerializer = TextLikeSerializer(),
+            logger = hitRatio,
+        )
+    }
+
     private class TextLikeSerializer : KacheSerializer<String> {
         override fun serialize(value: String): ByteArray = value.encodeToByteArray()
         override fun deserialize(bytes: ByteArray): String = bytes.decodeToString()
