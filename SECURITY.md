@@ -40,9 +40,12 @@ A useful report includes:
 
 ## Supply chain
 
-Every dependency the build resolves is checked against a recorded SHA-256 in
-`gradle/verification-metadata.xml`. A dependency bump fails the build until the metadata is
-regenerated, which puts the new checksum in a diff a reviewer can see.
+Every build input the project resolves — jars, klibs and `.pom`/`.module` descriptors — is
+checked against a recorded SHA-256 in `gradle/verification-metadata.xml`. A dependency bump
+fails the build until the metadata is regenerated, which puts the new checksum in a diff a
+reviewer can see. Documentation artifacts (`-sources`, `-javadoc` and their variants) are
+trusted by name instead: they never reach a compile or runtime classpath and exist only for IDE
+indexing. That exception is deliberate and is stated in the file next to the rules.
 
 These are checksums, not signatures. The project has no GPG key, so a published artifact
 whose bytes match a recorded hash would pass verification. Signing the release artifacts is on

@@ -704,67 +704,41 @@ build cannot cross that boundary; a wrong coordinate, a POM missing a field or a
 `consumer-android` and `consumer-kmp` declare no serialization dependency of their own, so
 they fail to compile the moment `:cache-storage` stops exposing `KSerializer` as `api`.
 
-Every resolved dependency is checked against a recorded SHA-256 in
-`gradle/verification-metadata.xml`, so a dependency bump fails until the metadata is
+Every build input — jar, klib, and `.pom`/`.module` descriptor — is checked against a recorded
+SHA-256 in `gradle/verification-metadata.xml`, so a dependency bump fails until the metadata is
 regenerated:
 
 ```bash
-./gradlew --write-verification-metadata sha256 check
+./gradlew --write-verification-metadata sha256 check :sample-android:assembleDebug
 ./gradlew --dependency-verification=strict check
 ```
 
-One caveat worth knowing before your first dependency bump: `--write-verification-metadata` only
-records what a CLI invocation actually downloads, and Android Studio downloads more than the
-CLI does. During sync the IDE resolves extra configurations to index dependency sources and
-API docs, so a metadata file generated purely from `check` and `assembleDebug` leaves the IDE
-unable to sync:
+Documentation artifacts are the deliberate exception. `-sources.jar`, `-javadoc.jar` and their
+`-samples-sources` / `-common-sources` variants are trusted by name through `<trusted-artifacts>`:
+they never reach a compile or runtime classpath, and pinning them was the one part of this file
+that could not converge — `--write-verification-metadata` records only what the invoking process
+downloads, while the IDE resolves documentation variants that no CLI task touches. Binaries,
+klibs and descriptors stay pinned; the trade is stated in the file next to the rules.
 
-```
-Dependency verification failed for configuration ':cache-store-room:jvmCompileClasspath'
-20 artifacts failed verification:
-  - asm-9.10.1-javadoc.jar (org.ow2.asm:asm:9.10.1) ...
-```
+Two events still need an explicit command, and both are rare:
 
-Do not hash the cache by hand, and do not guess file names: Gradle knows which documentation
-variant each module publishes, and it is the only party that can record a checksum it actually
-downloaded from a declared repository. The IDE's indexing requests are therefore served by a
-Gradle task that resolves the documentation variants of every component already in the file:
+- **A Gradle wrapper upgrade.** The distribution embeds its own runtime libraries in
+  `gradle.gradleHomeDir/lib`, and the IDE resolves their aliases in order to index them, so their
+  descriptors must be pinned even though no CLI task resolves them:
 
-```bash
-./gradlew --write-verification-metadata sha256 recordIdeIndexingArtifacts
-./gradlew --dependency-verification=strict recordIdeIndexingArtifacts   # проверка без записи
-```
+  ```bash
+  ./gradlew --write-verification-metadata sha256 recordIdeIndexingArtifacts
+  ```
 
-The task does not resolve transitive graphs: a documentation request for one module must not
-drag in unrelated binaries. It inspects only the attributes of the selected module variant, so
-a module that publishes no documentation is skipped rather than recorded as its main jar.
-
-Its component list is not limited to what is already in the file. The Gradle distribution puts
-its own runtime libraries in `lib/`, and their versions change with the wrapper: Gradle 9.6.1
-ships `org.apache.groovy:groovy:4.0.32`, while the metadata recorded 4.0.29 from an older
-distribution. During sync Android Studio requests the documentation variant of the new library
-and fails on `groovy-4.0.32-sources.jar` and its `.module` descriptor. The task therefore also
-reads the coordinates the distribution itself writes next to each library in
-`gradle.gradleHomeDir/lib/*.properties` (`alias.group`, `alias.name`, `alias.version`), so a
-Gradle upgrade is covered as a class — including BOM-only aliases such as `junit-bom` that have
-no jar — instead of by hardcoding one coordinate. Files without `alias.group` are Gradle's own
-internal modules and are skipped.
-
-`tools/add-ide-artifacts-verification.py` is an offline companion for when Gradle cannot run.
-It takes the requests Gradle itself made (HTML reports in `build/reports/dependency-verification/`,
-falling back to `idea.log`, which rotates), and it records a checksum only when the module's
-Gradle Module Metadata lists that file with a `sha256` and the cached file matches it. It never
-records a module's documentation without its `.module`/`.pom` descriptor being present already,
-because Gradle verifies the descriptor first and a missing one fails the build. A request for the
-descriptor itself is left to Gradle: no `.module`/`.pom` contains the `sha256` of its own bytes.
-Its exit codes:
-0 — nothing left to record; 1 — some requests need Gradle; 2 — a checksum did not match and nothing
-was written.
-
-```bash
-python3 tools/add-ide-artifacts-verification.py
-python3 -m unittest discover -s tools/tests -v
-```
+  The task reads the coordinates the distribution itself writes next to each library in
+  `lib/*.properties` (`alias.group`/`alias.name`/`alias.version`) instead of hardcoding them, so a
+  wrapper upgrade is covered as a class. Documentation files themselves are trusted and need no
+  entry, which is what keeps this a single step.
+- **An AGP upgrade.** `aapt2` is chosen by an artifact transform per OS, so every platform you
+  build on needs its own checksum: pinning only the host you generated the file on made the Linux
+  CI job fail while macOS stayed green. All three variants (`-linux`, `-osx`, `-windows`) are
+  recorded; compute the new values from the artifacts published in
+  `dl.google.com/android/maven2`.
 
 Regenerate the whole file after a dependency bump rather than patching it, and prove the result
 with `--refresh-dependencies` — without it, verification passes against the cache and proves
