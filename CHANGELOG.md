@@ -77,6 +77,19 @@ minor release may contain breaking changes; each one is listed with what a consu
 - The sample's module layout changed (`:sample` + `:sample-android` + `iosApp`). It is not
   published, so no consumer is affected.
 
+### Removed
+
+- `CacheResult.Loading`. It was published in 0.1.0 but no strategy ever emitted it — the
+  pipeline publishes outcomes only — so every `is Loading ->` branch a consumer wrote was dead
+  code. Progress is not a result: `CachedState.isLoading` carries it, driven by
+  `KacheStateHolder`, and it holds across the whole window in which a revalidating strategy has
+  already returned the cached value. Emitting a placeholder instead would have changed the
+  emission count of `CacheFirst` from one to two, so a caller taking `first()` would have
+  received "wait" where it used to receive data.
+  **What a consumer has to do:** delete the `Loading` branch from `when` expressions over
+  `CacheResult`, and read progress from `CachedState.isLoading` (or from a `KacheStateHolder`).
+  Nothing else in the hierarchy changed.
+
 ## [0.1.0] — 2026-10-26
 
 First release. Coordinates are `io.github.slavikjunior.kache:cache-core`, `cache-storage`,

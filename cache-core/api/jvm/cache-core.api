@@ -26,19 +26,6 @@ public final class io/github/slavikjunior/kache/core/CacheResult$Error : io/gith
 	public fun toString ()Ljava/lang/String;
 }
 
-public final class io/github/slavikjunior/kache/core/CacheResult$Loading : io/github/slavikjunior/kache/core/CacheResult {
-	public fun <init> ()V
-	public fun <init> (Ljava/lang/Object;)V
-	public synthetic fun <init> (Ljava/lang/Object;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
-	public final fun component1 ()Ljava/lang/Object;
-	public final fun copy (Ljava/lang/Object;)Lio/github/slavikjunior/kache/core/CacheResult$Loading;
-	public static synthetic fun copy$default (Lio/github/slavikjunior/kache/core/CacheResult$Loading;Ljava/lang/Object;ILjava/lang/Object;)Lio/github/slavikjunior/kache/core/CacheResult$Loading;
-	public fun equals (Ljava/lang/Object;)Z
-	public final fun getCachedData ()Ljava/lang/Object;
-	public fun hashCode ()I
-	public fun toString ()Ljava/lang/String;
-}
-
 public final class io/github/slavikjunior/kache/core/CacheResult$Success : io/github/slavikjunior/kache/core/CacheResult {
 	public fun <init> (Ljava/lang/Object;Lio/github/slavikjunior/kache/core/CacheOrigin;)V
 	public final fun component1 ()Ljava/lang/Object;

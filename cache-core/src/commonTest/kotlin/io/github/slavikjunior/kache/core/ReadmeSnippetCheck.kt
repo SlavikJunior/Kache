@@ -129,6 +129,38 @@ class ReadmeSnippetCheck {
         )
     }
 
+    /** The headline snippet: the `when` must stay exhaustive over the result hierarchy. */
+    private suspend fun headline(cache: KmpCache<String, String>): Any = cache.get(
+        key = "user-42",
+        strategy = CacheStrategy.CacheFirst,
+        fetcher = { api.loadUser("42") },
+    ).collect { result ->
+        when (result) {
+            is CacheResult.Success -> render(result.data, origin = result.origin)
+            is CacheResult.Error -> showError(result.error)
+        }
+    }
+
+    private fun render(data: String, origin: CacheOrigin): Unit = Unit
+    private fun showError(error: KacheException): Unit = Unit
+
+    /**
+     * The view-layer snippet: progress comes from the state holder, not from a result case.
+     *
+     * Asserting on the type keeps the README's claim honest — `CachedState` is what carries
+     * "in flight", so a reader who looks for it in `CacheResult` learns why it is not there.
+     */
+    private fun viewLayerSnippet(holder: KacheStateHolder<String, String>): Any {
+        val state: CachedState<String> = holder.kacheState.value
+        val data = state.data
+        return when {
+            data != null -> render(data, origin = requireNotNull(state.origin))
+            state.error != null -> showError(state.error)
+            state.isLoading -> Unit
+            else -> Unit
+        }
+    }
+
     private class TextLikeSerializer : KacheSerializer<String> {
         override fun serialize(value: String): ByteArray = value.encodeToByteArray()
         override fun deserialize(bytes: ByteArray): String = bytes.decodeToString()

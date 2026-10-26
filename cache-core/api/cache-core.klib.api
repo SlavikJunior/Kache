@@ -104,19 +104,6 @@ sealed interface <#A: out kotlin/Any?> io.github.slavikjunior.kache.core/CacheRe
         final fun toString(): kotlin/String // io.github.slavikjunior.kache.core/CacheResult.Error.toString|toString(){}[0]
     }
 
-    final class <#A1: out kotlin/Any?> Loading : io.github.slavikjunior.kache.core/CacheResult<#A1> { // io.github.slavikjunior.kache.core/CacheResult.Loading|null[0]
-        constructor <init>(#A1? = ...) // io.github.slavikjunior.kache.core/CacheResult.Loading.<init>|<init>(1:0?){}[0]
-
-        final val cachedData // io.github.slavikjunior.kache.core/CacheResult.Loading.cachedData|{}cachedData[0]
-            final fun <get-cachedData>(): #A1? // io.github.slavikjunior.kache.core/CacheResult.Loading.cachedData.<get-cachedData>|<get-cachedData>(){}[0]
-
-        final fun component1(): #A1? // io.github.slavikjunior.kache.core/CacheResult.Loading.component1|component1(){}[0]
-        final fun copy(#A1? = ...): io.github.slavikjunior.kache.core/CacheResult.Loading<#A1> // io.github.slavikjunior.kache.core/CacheResult.Loading.copy|copy(1:0?){}[0]
-        final fun equals(kotlin/Any?): kotlin/Boolean // io.github.slavikjunior.kache.core/CacheResult.Loading.equals|equals(kotlin.Any?){}[0]
-        final fun hashCode(): kotlin/Int // io.github.slavikjunior.kache.core/CacheResult.Loading.hashCode|hashCode(){}[0]
-        final fun toString(): kotlin/String // io.github.slavikjunior.kache.core/CacheResult.Loading.toString|toString(){}[0]
-    }
-
     final class <#A1: out kotlin/Any?> Success : io.github.slavikjunior.kache.core/CacheResult<#A1> { // io.github.slavikjunior.kache.core/CacheResult.Success|null[0]
         constructor <init>(#A1, io.github.slavikjunior.kache.core/CacheOrigin) // io.github.slavikjunior.kache.core/CacheResult.Success.<init>|<init>(1:0;io.github.slavikjunior.kache.core.CacheOrigin){}[0]
 

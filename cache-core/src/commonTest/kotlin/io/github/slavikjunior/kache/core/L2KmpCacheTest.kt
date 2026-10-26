@@ -39,6 +39,19 @@ class L2KmpCacheTest {
     }
 
     @Test
+    fun cacheFirstEmitsExactlyOneResult() = runTest {
+        // The count is part of the contract, not an implementation detail: a placeholder
+        // emission (a `Loading` case, say) would make `first()` return "wait" where the caller
+        // previously received data, and every consumer that reads the flow once would change
+        // meaning without a compile error. Revalidating strategies emit twice on purpose;
+        // this one must not.
+        val results = cache().get("k", CacheStrategy.CacheFirst) { "fresh" }.toList()
+
+        assertEquals(1, results.size, "a single-pass strategy must publish one result")
+        assertEquals(CacheResult.Success("fresh", CacheOrigin.NETWORK), results.single())
+    }
+
+    @Test
     fun cacheFirstServesTheCachedValueWithoutCallingTheFetcher() = runTest {
         val cache = cache()
         cache.put("k", "cached")

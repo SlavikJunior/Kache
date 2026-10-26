@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-541%20green-1D6B4F.svg)](#project-status)
+[![Tests](https://img.shields.io/badge/tests-657%20green-1D6B4F.svg)](#project-status)
 
 **English** · [Русский](README.ru.md)
 
@@ -29,7 +29,6 @@ cache.get(
 ).collect { result ->
     when (result) {
         is CacheResult.Success -> render(result.data, origin = result.origin)
-        is CacheResult.Loading -> showSpinner()
         is CacheResult.Error   -> showError(result.error)
     }
 }
@@ -37,6 +36,9 @@ cache.get(
 
 That snippet is the whole idea: you describe *what* you want, the cache decides whether it
 comes from memory, from disk or from the network, and it tells you which one it was.
+`CacheResult` is a *result*, so it has no "still working" case — a screen that needs progress
+uses `CachedState.isLoading`, which the state holder keeps true for as long as the read runs,
+including the window in which a refresh already shows the cached value.
 
 ---
 
@@ -86,7 +88,7 @@ There are good general-purpose caches. The gap this fills is narrower:
   "the screen shows something" and "the screen shows something and I know it is a stale
   revalidation that is still in flight".
 - **A refresh does not blank the screen.** `CachedState` keeps the last value while
-  `isLoading` is true. Mapping raw cache events onto a `StateFlow` would drop it.
+  `isLoading` is true. Mapping raw cache results onto a `StateFlow` would drop it.
 - **Platforms are first-class.** The same cache code runs on Android and iOS, including
   persistent storage, through a pluggable `StorageEngine`.
 
@@ -820,7 +822,7 @@ is closed out (see [`SECURITY.md`](SECURITY.md) and [`docs/security-audit.md`](d
 Module layering, data flow and the release specification are documented in
 [`docs/`](docs/ARCHITECTURE.md), and the release history is in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Test coverage** — 521 tests in the standard matrix, plus a 20-test instrumented suite, green
+**Test coverage** — 657 tests in the standard matrix, plus a 20-test instrumented suite, green
 on every host:
 
 | Module | JVM | Android host | iOS simulator | Android device |

@@ -10,7 +10,7 @@
 [![KSP](https://img.shields.io/badge/KSP-2.3.12-2E6D82.svg)](https://kotlinlang.org/docs/ksp-overview.html)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-2.11.0-3DDC84.svg?logo=android)](https://developer.android.com/jetpack/androidx/releases/lifecycle)
 [![minSdk](https://img.shields.io/badge/minSdk-23-8A8A8A.svg)](https://developer.android.com)
-[![Tests](https://img.shields.io/badge/tests-541%20green-1D6B4F.svg)](#покрытие-тестами)
+[![Tests](https://img.shields.io/badge/tests-657%20green-1D6B4F.svg)](#покрытие-тестами)
 
 [English](README.md) · **Русский**
 
@@ -29,14 +29,16 @@ cache.get(
 ).collect { result ->
     when (result) {
         is CacheResult.Success -> render(result.data, origin = result.origin)
-        is CacheResult.Loading -> showSpinner()
         is CacheResult.Error   -> showError(result.error)
     }
 }
 ```
 
 В этом фрагменте вся идея: вы описываете, **что** хотите, а кэш решает, откуда взять —
-из памяти, с диска или из сети, и сообщает, откуда он это взял.
+из памяти, с диска или из сети, и сообщает, откуда он это взял. `CacheResult` — это
+**результат**, поэтому варианта «ещё работаю» в нём нет: экран, которому нужен прогресс,
+читает `CachedState.isLoading` — держатель состояния держит его `true`, пока идёт чтение,
+включая окно, когда при обновлении уже показано значение из кэша.
 
 ---
 
@@ -86,7 +88,7 @@ cache.get(
   `MEMORY_STALE` и `DISK_STALE`. Это разница между «экран что-то показал» и «экран
   показал, и я знаю, что это устаревшая ревалидация, которая ещё идёт».
 - **Обновление не очищает экран.** `CachedState` сохраняет прежнее значение, пока
-  `isLoading` равен `true`. Если разложить сырые события кэша по `StateFlow`, значение
+  `isLoading` равен `true`. Если разложить сырые результаты кэша по `StateFlow`, значение
   потерялось бы.
 - **Платформы — первоклассные.** Один и тот же код кэша работает на Android и iOS, включая
   постоянное хранилище, через подменяемый `StorageEngine`.
@@ -821,7 +823,7 @@ bundled-драйвер SQLite:
 
 ### Покрытие тестами
 
-521 тест в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
+657 тестов в стандартной матрице плюс 20 инструментальных, зелёные на каждом хосте:
 
 | Модуль | JVM | Android-хост | iOS-симулятор | Android-устройство |
 |---|---:|---:|---:|---:|

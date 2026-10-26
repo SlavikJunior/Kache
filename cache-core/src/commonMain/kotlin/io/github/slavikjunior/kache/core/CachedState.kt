@@ -3,11 +3,15 @@ package io.github.slavikjunior.kache.core
 /**
  * A flattened snapshot of a cache read, suitable for driving a view.
  *
- * [CacheResult] describes *events* and a flow of them, which is the right shape for a
- * pipeline but a poor fit for a state holder: a `StateFlow` keeps only its latest
- * emission, so mapping events straight onto it would drop the currently displayed value
- * the moment a refresh starts. This type keeps the last known data while
- * [isLoading] is true, so a refresh dims the screen instead of blanking it.
+ * [CacheResult] describes *results* and a flow of them, which is the right shape for a
+ * pipeline but a poor fit for a state holder: a `StateFlow` keeps only its latest emission,
+ * so mapping results straight onto it would drop the currently displayed value the moment a
+ * refresh starts. This type keeps the last known data while [isLoading] is true, so a refresh
+ * dims the screen instead of blanking it.
+ *
+ * [isLoading] is owned by [KacheStateHolder] rather than by the cache: results say what
+ * happened, and only the holder knows that a read is in flight, including the window in which
+ * a revalidating strategy has already delivered the cached value.
  *
  * It is deliberately framework-free. Compose, Views and Swift all render the same type,
  * so nothing here forces a UI toolkit on the consumer.

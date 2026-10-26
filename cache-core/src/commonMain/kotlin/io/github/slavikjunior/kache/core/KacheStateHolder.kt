@@ -81,9 +81,9 @@ public class KacheStateHolder<K, V>(
 
         loadJob?.cancel()
 
-        // The read is in flight from this moment. The cache pipeline never emits
-        // `CacheResult.Loading` — it publishes results only — so without this the flag could
-        // never become true and a consumer would have no spinner to show.
+        // The read is in flight from this moment. The pipeline publishes results only — there
+        // is no `Loading` emission to hang the flag on — so without this line a consumer would
+        // have no spinner to show.
         //
         // A read for a different key also drops the displayed value: it belongs to the
         // previous key, and keeping it would render the old screen's data under the new
@@ -131,13 +131,6 @@ public class KacheStateHolder<K, V>(
     }
 
     private fun CacheResult<V>.foldedInto(previous: CachedState<V>): CachedState<V> = when (this) {
-        // Keep whatever is on screen: a refresh that has already produced stale data
-        // should replace it, but a refresh that has not should not blank the view.
-        is CacheResult.Loading -> previous.copy(
-            data = cachedData ?: previous.data,
-            error = null,
-        )
-
         // `isLoading` is deliberately carried over rather than cleared: a revalidating
         // strategy emits the cached value while the refresh is still running, and "a read is
         // in flight" is the truth for that whole window. `load` clears it when the flow
