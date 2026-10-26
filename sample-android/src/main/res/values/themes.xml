@@ -1,0 +1,13 @@
+<resources>
+    <!--
+      Compose paints the whole screen; the platform theme exists only to remove the decor
+      ActionBar. Without an explicit theme the activity inherits the device default, which
+      has one, and the app label ends up rendered above the Compose TopAppBar — two bars
+      for one title.
+
+      The parent also supplies the right window background per night qualifier, so a cold
+      start does not flash white in dark mode. `enableEdgeToEdge()` still owns the system
+      bar colours at runtime; nothing here sets them.
+    -->
+    <style name="Theme.KacheSample" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

@@ -14,6 +14,7 @@ androidx-test = "1.7.0"
 androidx-test-ext-junit = "1.3.0"
 compose-bom = "2026.09.00"
 robolectric = "4.17"
+ktor = "3.6.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -36,6 +37,13 @@ compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material-icons-core = { module = "androidx.compose.material:material-icons-core" }
+# Сетевой клиент нужен только сэмплу: сама библиотека кеша не делает HTTP-запросов,
+# вызывающий код передаёт fetcher. Ktor выбран потому, что сэмпл остаётся переносимым
+# на KMP, а не потому, что библиотека его требует.
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-android = { module = "io.ktor:ktor-client-android", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 junit4 = { module = "junit:junit", version = "4.13.2" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 # Инструментальные тесты: нужны, чтобы прогонять Room на реальном устройстве, где

@@ -1,0 +1,4 @@
+<resources>
+    <!-- Dark counterpart of the light theme in values/themes.xml. -->
+    <style name="Theme.KacheSample" parent="android:Theme.Material.NoActionBar" />
+</resources>

@@ -1,4 +1,4 @@
-package io.github.slavikjunior.kache.sample
+package io.github.slavikjunior.kache.sample.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
