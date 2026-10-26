@@ -26,6 +26,19 @@ minor release may contain breaking changes; each one is listed with what a consu
   and the iOS simulator, including key-encoding injectivity, path-traversal keys, the size
   limit, reaping and eviction order.
 
+**Hard tests — `:cache-storage`**
+- Property tests over the record codec: every prefix of a valid record is refused instead of
+  misread, a declared length longer than the payload is refused without being narrowed (the
+  `2^32` → `0` and `Long.MAX_VALUE` → negative-offset bugs), a shorter one returns exactly the
+  declared bytes, and arbitrary bytes are only ever refused as format errors — never an
+  `IndexOutOfBoundsException`, a negative-size allocation or an out-of-memory.
+- A nesting sweep for the JSON guard: accepted to 64 levels, refused above it at any depth up
+  to 100 000, with brackets inside strings and escapes not counted.
+- Chaos tests on real threads: readers during writers, `clear()` during writes, eviction during
+  writes. They assert the property a cache needs — a record is whole or absent — rather than an
+  internal order, and the failed-write case is driven deterministically through the `FileOps`
+  seam instead of depending on how a race happens to schedule.
+
 **Observability — `:cache-core`**
 - `KacheLogger`: an injectable observer with no-op defaults for `onMiss`, `onHit`, `onFetch`,
   `onRetry`, `onError` and `onEvict`. Pass it to `L2KmpCache`, `ChainKmpCache`, or either
@@ -93,6 +106,9 @@ minor release may contain breaking changes; each one is listed with what a consu
   Nothing is removed; the JVM and Android artifacts are unchanged.
 - The sample's module layout changed (`:sample` + `:sample-android` + `iosApp`). It is not
   published, so no consumer is affected.
+- `FileStorageEngine.clear()` documents what happens when a write is in flight: the writer's
+  temporary file is deleted underneath it, so that write fails with a `DiskWriteException`
+  rather than being silently dropped. A record is never left half-written either way.
 - `FileStorageEngine.size()` no longer counts a file it did not write. Temporary files and
   names the key encoding cannot have produced are excluded, the same rule
   `evictionCandidates` already applied. The contract always said "approximate number of

@@ -174,6 +174,70 @@ class FileStorageEngineContractTest {
     }
 
     @Test
+    fun aRecordExactlyAtTheLimitIsAcceptedAndOneByteOverIsRefused() = runTest {
+        // The boundary is inclusive on the write path: a record that fits exactly must not be
+        // rejected, and the off-by-one must not be silently allowed — both directions are one
+        // comparison away from each other.
+        val record = record(bytes = ByteArray(100) { 'x'.code.toByte() })
+        val encodedSize = StorageRecordFileCodec.encode(record).size.toLong()
+
+        val exact = FileStorageEngine(newTestDirectory("engine-exact"), maxRecordBytes = encodedSize)
+        exact.put("k", record)
+        assertContentEquals(record.data, assertNotNull(exact.get("k")).data)
+
+        val tooSmall = FileStorageEngine(newTestDirectory("engine-small"), maxRecordBytes = encodedSize - 1)
+        assertFailsWith<KacheException.DiskWriteException> { tooSmall.put("k", record) }
+        assertEquals(0L, tooSmall.size(), "a refused write must not leave a record behind")
+    }
+
+    @Test
+    fun aHeaderClaimingAHugeLengthIsTreatedAsCorruptRatherThanAllocated() = runTest {
+        // A crafted file, not a random one: the declared length is the part an attacker
+        // controls, and narrowing it to Int before validating is how a tiny file becomes a
+        // huge allocation or a silently empty payload.
+        val crafted = "v2|1|0|2|9223372036854775807|x".encodeToByteArray()
+        val path = joinPath(root, "kcrafted")
+        FileTestSupport.writeFile(path, crafted)
+
+        val read = engine.get("crafted")
+
+        assertNull(read, "a record whose declared length cannot fit must read as absent")
+        assertFalse(FileTestSupport.exists(path), "and be dropped like any other corrupt record")
+    }
+
+    @Test
+    fun aWriteThatCannotBePublishedIsReportedAndLeavesNothingBehind() = runTest {
+        // The interleaving a concurrent `clear()` produces, made deterministic: the temporary
+        // file disappears between being written and being moved into place. The engine has no
+        // say in that — it delegates the write — so what it must guarantee is the report and
+        // the cleanup: a typed failure, no half record, no leftover temp file.
+        val real = platformFileOps()
+        val vanishing = object : FileOps by real {
+            override fun writeAtomically(
+                target: String,
+                directory: String,
+                bytes: ByteArray,
+                tempPrefix: String,
+                tempSuffix: String,
+            ) {
+                val temp = joinPath(directory, tempPrefix + "vanishing" + tempSuffix)
+                real.writeAtomically(temp, directory, bytes, tempPrefix, tempSuffix)
+                real.delete(temp)
+                throw IllegalStateException("the temporary file disappeared")
+            }
+        }
+        val directory = newTestDirectory("engine-vanishing")
+        val engine = FileStorageEngine(directory, DEFAULT_MAX_RECORD_BYTES, vanishing)
+
+        assertFailsWith<KacheException.DiskWriteException> {
+            engine.put("k", record(bytes = "value".encodeToByteArray()))
+        }
+
+        assertNull(engine.get("k"), "a failed write must not publish a record")
+        assertEquals(emptyList(), FileTestSupport.namesIn(directory), "and must not leave a file behind")
+    }
+
+    @Test
     fun foreignFilesAreIgnoredByRankingAndByCount() = runTest {
         engine.put("mine", record(bytes = "v".encodeToByteArray()))
         // A name `encodeKey` cannot have produced: it does not start with the marker.

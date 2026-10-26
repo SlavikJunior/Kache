@@ -114,6 +114,16 @@ public class FileStorageEngine internal constructor(
 
     override suspend fun remove(key: String): Boolean = files.delete(fileFor(key))
 
+    /**
+     * Deletes every file in the root directory, including temporary ones.
+     *
+     * Concurrent with a write, this may make that write fail: the writer's temporary file is
+     * deleted underneath it, so the rename cannot happen and `put` reports a
+     * [KacheException.DiskWriteException]. That is deliberate — the alternative would be to
+     * swallow the failure and let the caller believe a value was stored after the cache was
+     * emptied. A record is never left half-written either way: the target file only ever
+     * changes by rename.
+     */
     override suspend fun clear() {
         files.list(root).forEach { files.delete(joinPath(root, it.name)) }
     }
