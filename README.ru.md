@@ -96,14 +96,20 @@ cache.get(
 | Модуль | JVM | Android | iOS | Что это |
 |---|:---:|:---:|:---:|---|
 | `:cache-core` | ✅ | ✅ | ✅ | Кэш в памяти, стратегии, SPI `StorageEngine` |
-| `:cache-storage` | ✅ | ✅ | ❌ | Файловый L2-бэкенд |
+| `:cache-storage` | ✅ | ✅ | ✅² | Сериализаторы на всех таргетах; файловый L2 — на JVM/Android |
 | `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2-бэкенд |
 | `:cache-android` | ❌ | ✅ | ❌ | Удобства для Android (`l2Cache`, кеширующая ViewModel) |
-| `:sample-android` | ❌ | ✅ | ❌ | Приложение-пример: каталог машин и живая панель кеша |
+| `:sample` | ✅ | ✅ | ✅ | Каталог машин на Compose Multiplatform, общий для трёх платформ |
+| `:sample-android` | ❌ | ✅ | ❌ | Android-точка входа сэмпла |
 
 > ¹ `:cache-store-room` поддерживает `iosArm64` и `iosSimulatorArm64`. Варианта `iosX64` нет,
 > потому что `androidx.sqlite` 2.7.1 его не публикует и зависимость не разрешается для
-> этого таргета. У `:cache-core` вариант `iosX64` есть.
+> этого таргета. `iosX64` снят Apple с поддержки и в сэмпле не предлагается.
+>
+> ² `:cache-storage` публикует iOS-klib, в котором лежат сериализаторы
+> (`KotlinxJsonSerializer`, `StringSerializer`) и `KacheSerializer`. `FileStorageEngine`
+> построен на `java.io` и собирается только под JVM и Android; на iOS надёжный уровень
+> даёт `:cache-store-room`.
 
 Версия `0.1.0` опубликована в Maven Central. Артефакты подписаны и разрешаются из
 `mavenCentral()` — см. [Статус проекта](#статус-проекта).
@@ -713,8 +719,15 @@ WorkManager.
 ./gradlew check                    # тесты: JVM, Android-хост, iOS-симулятор
 ./gradlew apiCheck                 # проверка совместимости ABI
 ./gradlew :sample-android:assembleDebug
+./gradlew :sample:run                      # десктоп
 ./gradlew verifyLocalPublication   # публикует локально и проверяет состав артефактов
 ```
+
+Сэмпл работает на трёх платформах из одного `commonMain`: Android — через
+`:sample-android`, десктоп — через `:sample:run`, iOS — через Xcode-проект в `iosApp/`
+(`cd iosApp && xcodegen generate`, затем собрать схему `iosApp`). Android-часть собирается и
+линтится `:sample-android`, iOS-фреймворк линкуется
+`:sample:linkDebugFrameworkIosSimulatorArm64`.
 
 `verifyLocalPublication` — гейт, которого не даёт сама публикация: Gradle спокойно сообщает об
 успехе для публикации без `-sources.jar`, а Maven Central такую не примет. Задача проверяет у

@@ -95,14 +95,20 @@ There are good general-purpose caches. The gap this fills is narrower:
 | Module | JVM | Android | iOS | What it is |
 |---|:---:|:---:|:---:|---|
 | `:cache-core` | ✅ | ✅ | ✅ | L1 memory cache, strategies, `StorageEngine` SPI |
-| `:cache-storage` | ✅ | ✅ | ❌ | File-based L2 backend |
+| `:cache-storage` | ✅ | ✅ | ✅² | Serializers on every target; file-based L2 on JVM/Android |
 | `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2 backend |
 | `:cache-android` | ❌ | ✅ | ❌ | Android conveniences (`l2Cache`, caching ViewModel) |
-| `:sample-android` | ❌ | ✅ | ❌ | Car catalogue demo with a live cache panel |
+| `:sample` | ✅ | ✅ | ✅ | Compose Multiplatform car catalogue, shared by all three |
+| `:sample-android` | ❌ | ✅ | ❌ | Android entry point of the sample |
 
 > ¹ `:cache-store-room` supports `iosArm64` and `iosSimulatorArm64`. There is no `iosX64`
 > variant because `androidx.sqlite` 2.7.1 does not publish one, so the dependency cannot
-> resolve for that target. `:cache-core` does support `iosX64`.
+> resolve for that target. `iosX64` is deprecated by Apple and is not offered by the sample.
+>
+> ² `:cache-storage` publishes an iOS klib that contains the serializers
+> (`KotlinxJsonSerializer`, `StringSerializer`) and `KacheSerializer`. `FileStorageEngine`
+> needs `java.io`, so it is compiled for JVM and Android only; on iOS the durable tier comes
+> from `:cache-store-room`.
 
 `0.1.0` is published to Maven Central. The artifacts are signed and resolve from
 `mavenCentral()`; see [Project status](#project-status).
@@ -714,8 +720,15 @@ same `java.io` implementation; it was previously duplicated per platform.
 ./gradlew check                    # tests: JVM, Android host, iOS simulator
 ./gradlew apiCheck                 # binary-compatibility check
 ./gradlew :sample-android:assembleDebug
+./gradlew :sample:run                      # desktop
 ./gradlew verifyLocalPublication   # publishes locally and checks the artifact set
 ```
+
+The sample runs on three platforms from one `commonMain`: Android through
+`:sample-android`, the desktop through `:sample:run`, and iOS through the Xcode project in
+`iosApp/` (`cd iosApp && xcodegen generate`, then build the `iosApp` scheme). Its Android
+half is built and linted by `:sample-android`; the iOS framework is linked by
+`:sample:linkDebugFrameworkIosSimulatorArm64`.
 
 `verifyLocalPublication` is the gate that publishing itself does not provide: Gradle
 happily reports success for a publication with no `-sources.jar`, while Maven Central

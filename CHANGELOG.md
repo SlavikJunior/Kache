@@ -20,21 +20,44 @@ minor release may contain breaking changes; each one is listed with what a consu
 - Statistics are not a separate API: an implementation counts the events it receives. The
   sample does exactly that, which keeps the shape of "statistics" an application decision.
 
-**Sample — `:sample-android`**
-- Rebuilt as a car catalogue over the public NHTSA vPIC API (Ktor + kotlinx.serialization),
-  split into `domain`, `data`, `ui` and `di` packages inside the single module.
-- Demonstrates `CacheFirst` for the make list, `NetworkFirst` for models — so an offline
-  device still shows what it opened before — and `CacheAndNetwork` for an explicit refresh.
-- A live cache panel renders `KacheLogger` events and a hit ratio computed in the app.
+**`:cache-storage` on iOS**
+- `:cache-storage` publishes `iosArm64` and `iosSimulatorArm64` klibs carrying
+  `KacheSerializer`, `StringSerializer` and `KotlinxJsonSerializer`. `FileStorageEngine`
+  remains JVM/Android: it needs `java.io`. Without this artifact an iOS app that puts
+  `:cache-store-room` behind a cache has to reimplement `KacheSerializer` itself, including
+  the JSON nesting guard.
+- The JVM-only `StackOverflowError` guard in `KotlinxJsonSerializer` became `expect`/`actual`:
+  the type does not exist on Kotlin/Native, where stack exhaustion aborts the process.
+- The serializer tests moved to `commonTest` and now run on the simulator as well.
+
+**Sample — Compose Multiplatform**
+- The sample is now one shared app on Android, desktop and iOS: `:sample` holds all of
+  `domain`, `data`, `ui` and `di`, and each platform entry point chooses only a storage engine
+  and an HTTP engine. `:sample-android` is a thin application module, because AGP 9 does not
+  allow `com.android.application` and the KMP plugin in one module; `iosApp/` is an
+  xcodegen-described Xcode project.
+- A third screen shows NHTSA Canadian Vehicle Specifications for a chosen model year, cached
+  with `StaleWhileRevalidate` — the last strategy the sample had not exercised.
+- Every cache result event raises a snackbar (`hit`, `miss`, `retry`, `error`, `evict`);
+  `fetch` attempts stay in the panel, where they explain a sequence without interrupting.
+- The sample's own dependency catalog lives in `gradle/sample.versions.toml`: Compose
+  Multiplatform, Ktor and the lifecycle forks are no longer part of the library's catalog.
+- 38 sample tests: 29 shared by all three targets and 9 ViewModel tests on the JVM.
 
 **CI**
 - An `instrumented` job runs the 20-test Room suite on an API 34 emulator, closing the gap
   that `BundledSQLiteDriver` cannot be loaded in a host JVM.
+- The iOS job compiles and links `:cache-storage` and the sample framework, and runs the
+  `:cache-storage` and `:sample` simulator suites.
 
 ### Changed
 
 - `KacheLogger` is a new last parameter on the cache constructors and `l2Cache` factories.
   Source-compatible, binary-incompatible: a library built against 0.1.0 must be recompiled.
+- `:cache-storage` gained iOS targets, so its publication set now includes two more klibs.
+  Nothing is removed; the JVM and Android artifacts are unchanged.
+- The sample's module layout changed (`:sample` + `:sample-android` + `iosApp`). It is not
+  published, so no consumer is affected.
 
 ## [0.1.0] — 2026-10-26
 
