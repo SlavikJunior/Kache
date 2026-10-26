@@ -63,6 +63,7 @@ comes from memory, from disk or from the network, and it tells you which one it 
   - [9. Retry policy](#9-retry-policy)
   - [10. Bounding how much L2 keeps](#10-bounding-how-much-l2-keeps)
   - [11. Testing TTL without waiting](#11-testing-ttl-without-waiting)
+  - [12. Observing the cache](#12-observing-the-cache)
 - [Which backend should I use?](#which-backend-should-i-use)
 - [Security considerations](#security-considerations)
 - [Dependencies this library brings in](#dependencies-this-library-brings-in)
@@ -97,7 +98,7 @@ There are good general-purpose caches. The gap this fills is narrower:
 | `:cache-storage` | ✅ | ✅ | ❌ | File-based L2 backend |
 | `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2 backend |
 | `:cache-android` | ❌ | ✅ | ❌ | Android conveniences (`l2Cache`, caching ViewModel) |
-| `:sample-android` | ❌ | ✅ | ❌ | Demo app |
+| `:sample-android` | ❌ | ✅ | ❌ | Car catalogue demo with a live cache panel |
 
 > ¹ `:cache-store-room` supports `iosArm64` and `iosSimulatorArm64`. There is no `iosX64`
 > variant because `androidx.sqlite` 2.7.1 does not publish one, so the dependency cannot
@@ -532,6 +533,46 @@ clock.advance(101.milliseconds)
 
 assertNull(cache.get("k"))
 ```
+
+### 12. Observing the cache
+
+`KacheLogger` receives what the cache did, never what it stored, and every method has a no-op
+default, so an implementation overrides only what it needs.
+
+```kotlin
+import io.github.slavikjunior.kache.core.CacheOrigin
+import io.github.slavikjunior.kache.core.CacheStrategy
+import io.github.slavikjunior.kache.core.KacheLogger
+
+class HitRatio : KacheLogger {
+    var hits = 0
+        private set
+    var misses = 0
+        private set
+
+    override fun onHit(key: String, origin: CacheOrigin) {
+        hits++
+    }
+
+    override fun onMiss(key: String, strategy: CacheStrategy) {
+        misses++
+    }
+}
+
+val cache = L2KmpCache<String, UserProfile>(
+    storageEngine = engine,
+    valueSerializer = KotlinxJsonSerializer(UserProfile.serializer()),
+    logger = HitRatio(),
+)
+```
+
+Events are reported inline on the read path, so an implementation must be thread-safe and cheap.
+Keys arrive already converted through `keyToString`: a sensitive key is redacted where the cache
+is configured, not inside every implementation. Statistics are counted from these events rather
+than provided by the library, which leaves the numbers — and their shape — to the application.
+
+`onEvict` fires only when a record is dropped to honour `maxSize`. A record removed by a reap was
+already expired, so it is not an eviction: nothing was given up to make room.
 
 ---
 

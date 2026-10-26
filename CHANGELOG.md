@@ -7,6 +7,35 @@ minor release may contain breaking changes; each one is listed with what a consu
 
 ## [Unreleased]
 
+### Added
+
+**Observability — `:cache-core`**
+- `KacheLogger`: an injectable observer with no-op defaults for `onMiss`, `onHit`, `onFetch`,
+  `onRetry`, `onError` and `onEvict`. Pass it to `L2KmpCache`, `ChainKmpCache`, or either
+  `l2Cache` factory. Cached values are never passed to it, and keys arrive already converted
+  through `keyToString`, so a sensitive key is redacted where the cache is configured rather
+  than inside every implementation.
+- An `evict` event is emitted only for records dropped to honour `maxSize`; expired records
+  removed by a reap are not evictions, because nothing was given up to make room.
+- Statistics are not a separate API: an implementation counts the events it receives. The
+  sample does exactly that, which keeps the shape of "statistics" an application decision.
+
+**Sample — `:sample-android`**
+- Rebuilt as a car catalogue over the public NHTSA vPIC API (Ktor + kotlinx.serialization),
+  split into `domain`, `data`, `ui` and `di` packages inside the single module.
+- Demonstrates `CacheFirst` for the make list, `NetworkFirst` for models — so an offline
+  device still shows what it opened before — and `CacheAndNetwork` for an explicit refresh.
+- A live cache panel renders `KacheLogger` events and a hit ratio computed in the app.
+
+**CI**
+- An `instrumented` job runs the 20-test Room suite on an API 34 emulator, closing the gap
+  that `BundledSQLiteDriver` cannot be loaded in a host JVM.
+
+### Changed
+
+- `KacheLogger` is a new last parameter on the cache constructors and `l2Cache` factories.
+  Source-compatible, binary-incompatible: a library built against 0.1.0 must be recompiled.
+
 ## [0.1.0] — 2026-10-26
 
 First release. Coordinates are `io.github.slavikjunior.kache:cache-core`, `cache-storage`,

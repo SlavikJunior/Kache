@@ -63,6 +63,7 @@ cache.get(
   - [9. Политика повторов](#9-политика-повторов)
   - [10. Ограничение размера L2](#10-ограничение-размера-l2)
   - [11. Тестирование TTL без ожидания](#11-тестирование-ttl-без-ожидания)
+  - [12. Наблюдение за кэшем](#12-наблюдение-за-кэшем)
 - [Какой бэкенд выбрать?](#какой-бэкенд-выбрать)
 - [Вопросы безопасности](#вопросы-безопасности)
 - [Какие зависимости приносит библиотека](#какие-зависимости-приносит-библиотека)
@@ -98,7 +99,7 @@ cache.get(
 | `:cache-storage` | ✅ | ✅ | ❌ | Файловый L2-бэкенд |
 | `:cache-store-room` | ✅ | ✅ | ✅¹ | Room/SQLite L2-бэкенд |
 | `:cache-android` | ❌ | ✅ | ❌ | Удобства для Android (`l2Cache`, кеширующая ViewModel) |
-| `:sample-android` | ❌ | ✅ | ❌ | Приложение-пример |
+| `:sample-android` | ❌ | ✅ | ❌ | Приложение-пример: каталог машин и живая панель кеша |
 
 > ¹ `:cache-store-room` поддерживает `iosArm64` и `iosSimulatorArm64`. Варианта `iosX64` нет,
 > потому что `androidx.sqlite` 2.7.1 его не публикует и зависимость не разрешается для
@@ -530,6 +531,46 @@ clock.advance(101.milliseconds)
 
 assertNull(cache.get("k"))
 ```
+
+### 12. Наблюдение за кэшем
+
+`KacheLogger` получает то, что кэш сделал, но никогда — то, что он хранит. У каждого метода есть
+no-op реализация по умолчанию, поэтому переопределять нужно только нужное.
+
+```kotlin
+import io.github.slavikjunior.kache.core.CacheOrigin
+import io.github.slavikjunior.kache.core.CacheStrategy
+import io.github.slavikjunior.kache.core.KacheLogger
+
+class HitRatio : KacheLogger {
+    var hits = 0
+        private set
+    var misses = 0
+        private set
+
+    override fun onHit(key: String, origin: CacheOrigin) {
+        hits++
+    }
+
+    override fun onMiss(key: String, strategy: CacheStrategy) {
+        misses++
+    }
+}
+
+val cache = L2KmpCache<String, UserProfile>(
+    storageEngine = engine,
+    valueSerializer = KotlinxJsonSerializer(UserProfile.serializer()),
+    logger = HitRatio(),
+)
+```
+
+События приходят прямо из пути чтения, поэтому реализация обязана быть потокобезопасной и
+дешёвой. Ключ приходит уже приведённым через `keyToString`: чувствительный ключ редактируется
+там, где конфигурируется кэш, а не в каждой реализации. Статистику приложение считает по этим
+событиям само — библиотека не навязывает ни числа, ни их форму.
+
+`onEvict` срабатывает только когда запись удаляется ради соблюдения `maxSize`. Запись, убранная
+репером, уже была просрочена — это не вытеснение: место никто не освобождал.
 
 ---
 
