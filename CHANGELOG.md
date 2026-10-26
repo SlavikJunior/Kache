@@ -30,6 +30,18 @@ minor release may contain breaking changes; each one is listed with what a consu
   the type does not exist on Kotlin/Native, where stack exhaustion aborts the process.
 - The serializer tests moved to `commonTest` and now run on the simulator as well.
 
+**`:cache-core` view layer — fixes found by using it**
+- `CachedState.isLoading` could never become true: the cache pipeline emits results only, never
+  `CacheResult.Loading`, so the flag had no source. `KacheStateHolder` now sets it when a read
+  starts and clears it when the read's flow completes, which also covers revalidating
+  strategies — with `StaleWhileRevalidate` or `CacheAndNetwork` the cached value arrives while
+  the refresh is still in flight, and the flag stays true for that whole window.
+- A read for a different key no longer keeps the value of the previous key. `Loading` folded
+  into the previous state on purpose, but for a new key that meant rendering the old key's data
+  under the new key's title while it loaded — the opposite of what the class documents.
+- `isLoading` is now cleared by the current read only: a superseded read must not switch off
+  the spinner of the read that replaced it.
+
 **Sample — Compose Multiplatform**
 - The sample is now one shared app on Android, desktop and iOS: `:sample` holds all of
   `domain`, `data`, `ui` and `di`, and each platform entry point chooses only a storage engine
@@ -42,7 +54,13 @@ minor release may contain breaking changes; each one is listed with what a consu
   `fetch` attempts stay in the panel, where they explain a sequence without interrupting.
 - The sample's own dependency catalog lives in `gradle/sample.versions.toml`: Compose
   Multiplatform, Ktor and the lifecycle forks are no longer part of the library's catalog.
-- 38 sample tests: 29 shared by all three targets and 9 ViewModel tests on the JVM.
+- Every list is driven by the library's `KacheStateHolder`, and the repository hands over key,
+  strategy and fetcher as one `CacheRequest`; the sample no longer folds `CacheResult` itself.
+  `KacheableViewModel` is an `AndroidViewModel` in an Android-only module and therefore cannot
+  be used from `commonMain` — the sample uses the portable half it wraps.
+- The caches hold domain models, not DTOs, since a holder publishes what the cache stores;
+  domain models are `@Serializable` for that reason.
+- 32 sample tests: 22 shared by all three targets and 10 ViewModel tests on the JVM.
 
 **CI**
 - An `instrumented` job runs the 20-test Room suite on an API 34 emulator, closing the gap

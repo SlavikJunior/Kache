@@ -1,54 +1,61 @@
 package io.github.slavikjunior.kache.sample.domain.repository
 
-import io.github.slavikjunior.kache.core.CacheResult
+import io.github.slavikjunior.kache.core.KmpCache
 import io.github.slavikjunior.kache.sample.domain.model.CarMake
 import io.github.slavikjunior.kache.sample.domain.model.CarModel
 import io.github.slavikjunior.kache.sample.domain.model.CarSpecSheet
-import kotlinx.coroutines.flow.Flow
 
 /**
  * The car catalogue, as the rest of the app sees it.
  *
- * The cache strategy is a data-layer decision, not a UI one: nothing above this interface
- * chooses between `CacheFirst` and its alternatives. `refresh` is the only lever the UI
- * gets, and it means "get me the freshest data you can" rather than "call the network".
+ * The repository owns two things the screen must not: which cache backs which list, and the
+ * strategy that cache is read with. It hands both over as a [CacheRequest], and the view
+ * layer performs the read through `KacheStateHolder` — the library's cross-platform half of
+ * the view layer, which owns the loading flag, the origin, the error and the cancellation of
+ * a superseded read.
  *
- * The results are [CacheResult]s because the sample exists to show what the cache reports
- * — the origin of each value, and errors that may still carry a fallback. A repository in
- * a real product would usually fold these into its own model before they reach the UI.
+ * The caches hold domain models, not transport DTOs: the holder publishes what the cache
+ * stores, so the stored type and the rendered type have to be the same. Mapping happens in
+ * the request's fetcher, before the value is written.
+ *
+ * Keys are the repository's business as well — they are part of the record identity, and a
+ * screen that guessed them could silently miss its own data.
  */
 interface CarRepository {
 
-    /**
-     * Car makes.
-     *
-     * Served from cache when it is fresh, which is why relaunching the app shows
-     * `origin=DISK` without a request.
-     *
-     * @param refresh When true the cached value is emitted first and the network result
-     *   follows, so the screen updates twice instead of blanking.
-     */
-    fun makes(refresh: Boolean = false): Flow<CacheResult<List<CarMake>>>
+    /** Cache holding the make catalogue. One record for the whole list. */
+    val makesCache: KmpCache<String, List<CarMake>>
+
+    /** Cache holding one model list per make. */
+    val modelsCache: KmpCache<String, List<CarModel>>
+
+    /** Cache holding one specification sheet list per year, make and model. */
+    val specsCache: KmpCache<String, List<CarSpecSheet>>
 
     /**
-     * Models for [makeName].
+     * Reads the make catalogue.
      *
-     * Fetched first, with the cached list as the fallback — the shape that keeps working
-     * when the device is offline and the make was opened before.
+     * @param refresh True when the user asked for fresher data: the cached list stays on
+     *   screen and the network result replaces it, instead of the list blanking.
      */
-    fun models(makeName: String): Flow<CacheResult<List<CarModel>>>
+    fun makesRequest(refresh: Boolean = false): CacheRequest<String, List<CarMake>>
 
     /**
-     * Specifications of [modelName] produced by [makeName] in [year].
+     * Reads the models of [makeName].
      *
-     * Cached values are served immediately and refreshed in the background, because a
-     * measurement of a car that was built years ago does not change: waiting for the
-     * network to confirm a 2015 wheelbase would be slower and no more correct.
+     * Fetched first with the cached list as the fallback, which is what keeps the screen
+     * usable offline after the make has been opened once.
+     */
+    fun modelsRequest(makeName: String): CacheRequest<String, List<CarModel>>
+
+    /**
+     * Reads the specifications of [modelName] produced by [makeName] in [year].
+     *
+     * Cached values are served immediately and refreshed behind them: a measurement of a car
+     * built years ago does not change, so waiting for the network to confirm a 2015 wheelbase
+     * would be slower and no more correct.
      *
      * @param year Model year, as the source compiles its data per year.
      */
-    fun specs(makeName: String, modelName: String, year: Int): Flow<CacheResult<List<CarSpecSheet>>>
-
-    /** Drops every entry of every cache, including the records left from previous runs. */
-    suspend fun clearCache()
+    fun specsRequest(makeName: String, modelName: String, year: Int): CacheRequest<String, List<CarSpecSheet>>
 }

@@ -2,187 +2,161 @@ package io.github.slavikjunior.kache.sample.data.repository
 
 import io.github.slavikjunior.kache.core.CacheOrigin
 import io.github.slavikjunior.kache.core.CacheResult
-import io.github.slavikjunior.kache.core.EvictionStrategy
-import io.github.slavikjunior.kache.core.L2KmpCache
-import io.github.slavikjunior.kache.core.StorageEngine
-import io.github.slavikjunior.kache.core.StorageRecord
+import io.github.slavikjunior.kache.core.CacheStrategy
+import io.github.slavikjunior.kache.core.KmpCache
 import io.github.slavikjunior.kache.sample.data.remote.CarRemoteDataSource
 import io.github.slavikjunior.kache.sample.data.remote.dto.CanadianSpecsDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.MakeDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.ModelDto
 import io.github.slavikjunior.kache.sample.data.remote.dto.NameValueDto
-import io.github.slavikjunior.kache.storage.KotlinxJsonSerializer
-import kotlinx.coroutines.flow.Flow
+import io.github.slavikjunior.kache.sample.domain.model.CarMake
+import io.github.slavikjunior.kache.sample.domain.model.CarModel
+import io.github.slavikjunior.kache.sample.domain.model.CarSpecSheet
+import io.github.slavikjunior.kache.sample.testutil.testCache
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.hours
 
 /**
- * Covers the policy layer: which strategy each screen gets, and what the repository does
- * with the result.
+ * Covers the policy layer: the key, the strategy and the fetch of each read the repository
+ * hands to the view layer.
  *
- * The caches are real [L2KmpCache] instances over an in-memory engine, and the serializer is
- * the production one, so these tests exercise the same path the app does — including the
- * JSON round trip — without touching the network or the file system.
+ * The caches are real L2 instances over an in-memory engine with the production serializer,
+ * so these tests also pin that the domain models round-trip through JSON. What they do *not*
+ * re-test is `KacheStateHolder`'s own projection — that belongs to `:cache-core`, which runs
+ * its tests on every target.
  */
 class DefaultCarRepositoryTest {
 
     private val remote = FakeCarRemote()
+    private val makesCache = testCache(ListSerializer(CarMake.serializer()))
+    private val modelsCache = testCache(ListSerializer(CarModel.serializer()))
+    private val specsCache = testCache(ListSerializer(CarSpecSheet.serializer()))
 
     private val repository = DefaultCarRepository(
         remote = remote,
-        makesCache = cache(ListSerializer(MakeDto.serializer())),
-        modelsCache = cache(ListSerializer(ModelDto.serializer())),
-        specsCache = cache(ListSerializer(CanadianSpecsDto.serializer())),
+        makesCache = makesCache,
+        modelsCache = modelsCache,
+        specsCache = specsCache,
     )
 
     @Test
-    fun aColdMakeReadFetchesAndReportsNetwork() = runTest {
-        val results = repository.makes().toList()
+    fun theCatalogueIsCacheFirstAndARefreshRereadsThroughTheNetwork() {
+        val plain = repository.makesRequest()
+        assertEquals(CacheStrategy.CacheFirst, plain.strategy)
+        assertEquals("cars:makes", plain.key)
 
-        assertEquals(1, results.size)
-        assertEquals(CacheOrigin.NETWORK, (results.single() as CacheResult.Success).origin)
-        assertEquals(1, remote.makesCalls)
+        val refresh = repository.makesRequest(refresh = true)
+        assertEquals(CacheStrategy.CacheAndNetwork, refresh.strategy)
+        assertEquals(plain.key, refresh.key, "a refresh reads the same record, it does not create one")
     }
 
     @Test
-    fun namesAreTrimmedAndSortedBeforeTheyReachTheUi() = runTest {
+    fun modelsAreFetchedFirstAndSpecsAreServedWhileTheyRevalidate() {
+        assertEquals(CacheStrategy.NetworkFirst, repository.modelsRequest("HONDA").strategy)
+        assertEquals(
+            CacheStrategy.StaleWhileRevalidate,
+            repository.specsRequest("HONDA", "Accord", 2015).strategy,
+        )
+    }
+
+    @Test
+    fun namesAreTrimmedAndSortedByTheFetcher() = runTest {
         remote.makes = listOf(make(id = 2, name = "  TESLA "), make(id = 1, name = "ACURA"))
 
-        val makes = (repository.makes().toList().single() as CacheResult.Success).data
+        val data = fetch(repository.makesRequest(), makesCache)
 
-        assertEquals(listOf("ACURA", "TESLA"), makes.map { it.name })
+        assertEquals(listOf("ACURA", "TESLA"), data.map { it.name })
     }
 
     @Test
-    fun aWarmMakeReadIsServedFromStorageWithoutANetworkCall() = runTest {
-        repository.makes().toList()
-
-        val second = repository.makes().toList().single() as CacheResult.Success
-
-        assertEquals(CacheOrigin.DISK, second.origin, "CacheFirst must not re-fetch a fresh record")
-        assertEquals(1, remote.makesCalls, "the transport must not be touched twice")
-    }
-
-    @Test
-    fun refreshEmitsTheCachedListAndThenTheNetworkResult() = runTest {
-        repository.makes().toList()
-        remote.makes = listOf(make(id = 3, name = "BYD"))
-
-        val results = repository.makes(refresh = true).toList()
-
-        assertEquals(2, results.size, "the screen is meant to update twice, not blank")
-        assertEquals(CacheOrigin.DISK, (results[0] as CacheResult.Success).origin)
-        assertEquals(CacheOrigin.NETWORK, (results[1] as CacheResult.Success).origin)
-        assertEquals(listOf("BYD"), (results[1] as CacheResult.Success).data.map { it.name })
-    }
-
-    @Test
-    fun modelsFallBackToTheCachedListWhenTheNetworkFails() = runTest {
-        repository.models("HONDA").toList()
-        remote.failure = IllegalStateException("offline")
-
-        val result = repository.models("HONDA").toList().single()
-
-        val success = result as CacheResult.Success
-        assertEquals(CacheOrigin.DISK, success.origin, "offline must still show what was opened before")
-        assertEquals(listOf("Accord", "Civic"), success.data.map { it.name })
-    }
-
-    @Test
-    fun oneRecordServesEverySpellingOfAMakeName() = runTest {
-        repository.models("Honda").toList()
-        remote.failure = IllegalStateException("offline")
-
-        // Different case, same record: the key is normalised, the name sent to the API is not.
-        val result = repository.models("HONDA").toList().single() as CacheResult.Success
-
-        assertEquals(2, result.data.size)
-    }
-
-    @Test
-    fun modelsAreDeduplicatedAndSorted() = runTest {
+    fun modelsAreDeduplicatedAndSortedByTheFetcher() = runTest {
         remote.models = listOf(
             model(id = 2, name = "Civic"),
             model(id = 1, name = "Accord"),
             model(id = 2, name = "Civic"),
         )
 
-        val models = (repository.models("HONDA").toList().single() as CacheResult.Success).data
+        val data = fetch(repository.modelsRequest("HONDA"), modelsCache)
 
-        assertEquals(listOf("Accord", "Civic"), models.map { it.name })
+        assertEquals(listOf("Accord", "Civic"), data.map { it.name })
     }
 
     @Test
-    fun specsAreServedFromTheStoreAndRefreshedBehindIt() = runTest {
-        remote.specs = listOf(specSheet())
-
-        val cold = repository.specs("HONDA", "Accord", 2015).toList().single() as CacheResult.Success
-        assertEquals(CacheOrigin.NETWORK, cold.origin)
-        assertEquals("Overall length", cold.data.single().specs.single().label)
-
-        val warm = repository.specs("HONDA", "Accord", 2015).toList()
-
+    fun theModelsKeyIgnoresTheCaseOfTheMakeName() {
         assertEquals(
-            listOf(CacheOrigin.DISK, CacheOrigin.NETWORK),
-            warm.map { (it as CacheResult.Success).origin },
-            "StaleWhileRevalidate shows the measurement first and revalidates behind it",
+            repository.modelsRequest("Honda").key,
+            repository.modelsRequest("HONDA").key,
+            "two spellings must not occupy two records",
         )
     }
 
     @Test
-    fun anOfflineSpecsRefreshKeepsTheCachedSheetRatherThanReportingAFailure() = runTest {
-        repository.specs("HONDA", "Accord", 2015).toList()
-        remote.failure = IllegalStateException("offline")
+    fun theSpecsKeySeparatesYearsAndModels() {
+        val base = repository.specsRequest("HONDA", "Accord", 2015).key
 
-        val results = repository.specs("HONDA", "Accord", 2015).toList()
-
-        assertEquals(1, results.size, "a failed refresh must not replace what is on screen")
-        assertEquals(CacheOrigin.DISK, (results.single() as CacheResult.Success).origin)
+        assertNotEquals(base, repository.specsRequest("HONDA", "Accord", 2016).key)
+        assertNotEquals(base, repository.specsRequest("HONDA", "Civic", 2015).key)
     }
 
     @Test
-    fun aDifferentYearIsADifferentRecord() = runTest {
-        repository.specs("HONDA", "Accord", 2015).toList()
+    fun theSpecsFetcherMapsCodesToLabelledDomainSheets() = runTest {
+        remote.specs = listOf(
+            CanadianSpecsDto(
+                specs = listOf(
+                    NameValueDto("MODEL", "ACCORD 2DR COUPE"),
+                    NameValueDto("MYR", "15"),
+                    NameValueDto("OL", "480"),
+                    NameValueDto("CW", "1603"),
+                ),
+            ),
+        )
 
-        val other = repository.specs("HONDA", "Accord", 2016).toList().single() as CacheResult.Success
+        val sheets = fetch(repository.specsRequest("HONDA", "Accord", 2015), specsCache)
 
-        assertEquals(CacheOrigin.NETWORK, other.origin, "2016 must not be answered from the 2015 record")
-        assertEquals(2, remote.specsCalls)
+        val sheet = sheets.single()
+        assertEquals("ACCORD 2DR COUPE", sheet.trim)
+        assertEquals("15", sheet.dataYear)
+        assertEquals(listOf("Overall length", "Curb weight"), sheet.specs.map { it.label })
+        assertEquals(listOf("cm", "kg"), sheet.specs.map { it.unit })
     }
 
     @Test
-    fun clearCacheMakesTheNextReadColdAgain() = runTest {
-        repository.makes().toList()
+    fun aSheetWithNoKnownDimensionsIsDroppedInsteadOfRenderedEmpty() = runTest {
+        remote.specs = listOf(CanadianSpecsDto(specs = listOf(NameValueDto("MODEL", "X"))))
 
-        repository.clearCache()
-
-        val afterClear = repository.makes().toList().single() as CacheResult.Success
-        assertEquals(CacheOrigin.NETWORK, afterClear.origin)
-        assertEquals(2, remote.makesCalls)
+        assertTrue(fetch(repository.specsRequest("HONDA", "Accord", 2015), specsCache).isEmpty())
     }
 
     @Test
-    fun anEmptySpecificationListIsAValidAnswerNotAFailure() = runTest {
-        remote.specs = emptyList()
+    fun aFetchedListRoundTripsThroughTheCacheAsDomainModels() = runTest {
+        val request = repository.makesRequest()
 
-        val result = repository.specs("HONDA", "Accord", 1998).toList().single()
+        val cold = makesCache.get(request.key, request.strategy) { request.fetch(it) }
+            .toList().single() as CacheResult.Success
 
-        val success = result as CacheResult.Success
-        assertTrue(success.data.isEmpty(), "the dataset does not cover every model/year")
+        val warm = makesCache.get(request.key, request.strategy) { request.fetch(it) }
+            .toList().single() as CacheResult.Success
+
+        assertEquals(CacheOrigin.NETWORK, cold.origin)
+        assertEquals(CacheOrigin.DISK, warm.origin, "the record must survive the JSON round trip")
+        assertEquals(cold.data, warm.data)
+        assertEquals(listOf("HONDA", "TESLA"), warm.data.map { it.name })
+        assertEquals(1, remote.makesCalls, "a warm record must not fetch again")
     }
 
-    private fun <T : Any> cache(serializer: KSerializer<T>): L2KmpCache<String, T> = L2KmpCache(
-        storageEngine = InMemoryStorageEngine(),
-        valueSerializer = KotlinxJsonSerializer(serializer),
-        keyToString = { it },
-        defaultTtl = 1.hours,
-    )
+    private suspend fun <V : Any> fetch(
+        request: io.github.slavikjunior.kache.sample.domain.repository.CacheRequest<String, List<V>>,
+        cache: KmpCache<String, List<V>>,
+    ): List<V> {
+        val result = cache.get(request.key, request.strategy) { request.fetch(it) }
+            .toList().single() as CacheResult.Success
+        return result.data
+    }
 
     private fun make(id: Int, name: String) = MakeDto(
         id = id,
@@ -196,13 +170,6 @@ class DefaultCarRepositoryTest {
         makeName = "Honda",
         id = id,
         name = name,
-    )
-
-    private fun specSheet() = CanadianSpecsDto(
-        specs = listOf(
-            NameValueDto("MODEL", "ACCORD"),
-            NameValueDto("OL", "480"),
-        ),
     )
 }
 
@@ -250,36 +217,4 @@ private class FakeCarRemote : CarRemoteDataSource {
         failure?.let { throw it }
         return specs
     }
-}
-
-/**
- * Minimal [StorageEngine] for tests: records live in a map.
- *
- * `removeExpired` and `touch` keep the interface defaults — these tests never configure a
- * `maxSize` or an auto-reap, and a fake that silently claimed to support them would make the
- * LRU path look tested when it is not.
- */
-private class InMemoryStorageEngine : StorageEngine {
-
-    private val records = mutableMapOf<String, StorageRecord<*>>()
-
-    override suspend fun get(key: String): StorageRecord<*>? = records[key]
-
-    override suspend fun put(key: String, record: StorageRecord<*>) {
-        records[key] = record
-    }
-
-    override suspend fun remove(key: String): Boolean = records.remove(key) != null
-
-    override suspend fun clear() {
-        records.clear()
-    }
-
-    override suspend fun size(): Long = records.size.toLong()
-
-    override suspend fun evictionCandidates(
-        strategy: EvictionStrategy,
-        limit: Int,
-        now: Long,
-    ): List<String> = records.keys.take(limit)
 }

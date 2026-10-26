@@ -2,10 +2,10 @@ package io.github.slavikjunior.kache.sample.di
 
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEventLog
 import io.github.slavikjunior.kache.sample.data.remote.NhtsaApi
-import io.github.slavikjunior.kache.sample.data.remote.dto.CanadianSpecsDto
-import io.github.slavikjunior.kache.sample.data.remote.dto.MakeDto
-import io.github.slavikjunior.kache.sample.data.remote.dto.ModelDto
 import io.github.slavikjunior.kache.sample.data.repository.DefaultCarRepository
+import io.github.slavikjunior.kache.sample.domain.model.CarMake
+import io.github.slavikjunior.kache.sample.domain.model.CarModel
+import io.github.slavikjunior.kache.sample.domain.model.CarSpecSheet
 import io.github.slavikjunior.kache.store.room.createFromCachesDirectory
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.darwin.Darwin
@@ -31,13 +31,13 @@ fun createAppContainer(): AppContainer {
         remote = NhtsaApi(client),
         makesCache = carCache(
             engine = createFromCachesDirectory("${CacheNames.MAKES}.db"),
-            serializer = ListSerializer(MakeDto.serializer()),
+            serializer = ListSerializer(CarMake.serializer()),
             ttl = CacheTtls.MAKES,
             log = log,
         ),
         modelsCache = carCache(
             engine = createFromCachesDirectory("${CacheNames.MODELS}.db"),
-            serializer = ListSerializer(ModelDto.serializer()),
+            serializer = ListSerializer(CarModel.serializer()),
             ttl = CacheTtls.MODELS,
             log = log,
             retryPolicy = MODELS_RETRY,
@@ -45,7 +45,7 @@ fun createAppContainer(): AppContainer {
         ),
         specsCache = carCache(
             engine = createFromCachesDirectory("${CacheNames.SPECS}.db"),
-            serializer = ListSerializer(CanadianSpecsDto.serializer()),
+            serializer = ListSerializer(CarSpecSheet.serializer()),
             ttl = CacheTtls.SPECS,
             log = log,
             maxSize = CacheLimits.SPECS_RECORDS,

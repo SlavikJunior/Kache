@@ -5,14 +5,15 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import io.github.slavikjunior.kache.core.CacheResult
+import io.github.slavikjunior.kache.core.CachedState
+import io.github.slavikjunior.kache.core.KacheStateHolder
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEvent
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEventLog
 import io.github.slavikjunior.kache.sample.di.AppContainer
 import io.github.slavikjunior.kache.sample.domain.model.CarMake
 import io.github.slavikjunior.kache.sample.domain.model.CarModel
+import io.github.slavikjunior.kache.sample.domain.repository.CacheRequest
 import io.github.slavikjunior.kache.sample.domain.repository.CarRepository
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -25,6 +26,16 @@ import kotlinx.coroutines.launch
 /**
  * State holder for the cars screen graph.
  *
+ * The reads themselves are not implemented here. Each list is backed by a
+ * [KacheStateHolder] — the library's cross-platform view layer — which owns the parts every
+ * caching screen otherwise rewrites: the loading flag, the origin, the error, the fallback
+ * that survives a failed refresh, and the cancellation of a superseded read. This class only
+ * decides which level is visible and hands the holders the requests the repository defines.
+ *
+ * It extends a plain `ViewModel` rather than `KacheableViewModel` because that class is an
+ * `AndroidViewModel` in an Android-only module, and this code runs on Android, desktop and
+ * iOS. The portable half it wraps is `KacheStateHolder`, used directly.
+ *
  * One [CarsUiState] is exposed at a time, and every change goes through
  * [MutableStateFlow.update] against the current value, so a late emission from a cancelled
  * read cannot resurrect a state that was already replaced.
@@ -33,11 +44,8 @@ import kotlinx.coroutines.launch
  * snackbar that lives in the state would reappear after every recomposition or rotation.
  * [effects] carries those, and the log they come from stays in the state for the panel.
  *
- * The ViewModel owns no cache of its own: all three caches live in [AppContainer], because
- * a ViewModel dies on a configuration change and a cache must not.
- *
- * Cache strategies are not chosen here — [CarRepository] decides them. The screen only says
- * whether the user asked for fresh data.
+ * The caches live in [AppContainer], not here: a ViewModel dies on a configuration change and
+ * a cache must not.
  */
 class CarsViewModel(
     private val repository: CarRepository,
@@ -54,9 +62,9 @@ class CarsViewModel(
     /** Cache events worth a snackbar, emitted once each. */
     val effects: SharedFlow<CacheEvent> = _effects.asSharedFlow()
 
-    private var makesJob: Job? = null
-    private var modelsJob: Job? = null
-    private var specsJob: Job? = null
+    private val makesHolder = KacheStateHolder(viewModelScope, repository.makesCache)
+    private val modelsHolder = KacheStateHolder(viewModelScope, repository.modelsCache)
+    private val specsHolder = KacheStateHolder(viewModelScope, repository.specsCache)
 
     /**
      * Highest event id already turned into a snackbar.
@@ -79,6 +87,25 @@ class CarsViewModel(
                 }
             }
         }
+
+        // Each level publishes into its own slot of the screen state. The holder is the single
+        // source of truth for a list, so nothing else writes to these three fields.
+        viewModelScope.launch {
+            makesHolder.kacheState.collect { cached ->
+                _state.update { it.copy(makes = cached.content()) }
+            }
+        }
+        viewModelScope.launch {
+            modelsHolder.kacheState.collect { cached ->
+                _state.update { it.copy(models = cached.content()) }
+            }
+        }
+        viewModelScope.launch {
+            specsHolder.kacheState.collect { cached ->
+                _state.update { it.copy(specs = cached.content()) }
+            }
+        }
+
         loadMakes()
     }
 
@@ -86,41 +113,22 @@ class CarsViewModel(
      * Loads the make catalogue.
      *
      * @param refresh True when the user asked for fresh data: the cached list stays on
-     *   screen while the request runs, because the repository then reads through
-     *   `CacheAndNetwork`.
+     *   screen while the request runs.
      */
     fun loadMakes(refresh: Boolean = false) {
-        makesJob?.cancel()
-        _state.update { it.copy(makes = it.makes.copy(isLoading = true, error = null)) }
-
-        makesJob = viewModelScope.launch {
-            repository.makes(refresh).collect { result ->
-                _state.update { state -> state.copy(makes = state.makes.folded(result)) }
-            }
-        }
+        makesHolder.read(repository.makesRequest(refresh))
     }
 
     /** Opens [make] and loads its models. */
     fun selectMake(make: CarMake) {
-        modelsJob?.cancel()
-        specsJob?.cancel()
         _state.update {
-            it.copy(
-                selectedMake = make,
-                selectedModel = null,
-                models = ContentState(isLoading = true),
-                specs = ContentState(),
-            )
+            it.copy(selectedMake = make, selectedModel = null, specs = ContentState())
         }
-        loadModels(make)
+        modelsHolder.read(repository.modelsRequest(make.name))
     }
 
     /** Returns to the catalogue and drops everything below it from the screen state. */
     fun closeMake() {
-        modelsJob?.cancel()
-        specsJob?.cancel()
-        modelsJob = null
-        specsJob = null
         _state.update {
             it.copy(selectedMake = null, selectedModel = null, models = ContentState(), specs = ContentState())
         }
@@ -128,48 +136,39 @@ class CarsViewModel(
 
     /** Reloads the models of the open make; no-op when no make is open. */
     fun reloadModels() {
-        val make = _state.value.selectedMake ?: return
-        modelsJob?.cancel()
-        _state.update { it.copy(models = it.models.copy(isLoading = true, error = null)) }
-        loadModels(make)
+        if (_state.value.selectedMake == null) return
+        // The holder remembers the request, so repeating it cannot drift from what was loaded.
+        modelsHolder.retry()
     }
 
     /** Opens [model] and loads its specifications for the currently selected year. */
     fun selectModel(model: CarModel) {
-        specsJob?.cancel()
-        _state.update {
-            it.copy(selectedModel = model, specs = ContentState(isLoading = true))
-        }
+        _state.update { it.copy(selectedModel = model) }
         loadSpecs()
     }
 
     /** Returns to the model list. */
     fun closeModel() {
-        specsJob?.cancel()
-        specsJob = null
         _state.update { it.copy(selectedModel = null, specs = ContentState()) }
     }
 
     /**
      * Switches the requested model year.
      *
-     * A year change is a different record, so the specs list is cleared before the read:
-     * leaving the previous year's measurements on screen under a new year label would be
-     * the one kind of stale data a user would not forgive.
+     * A year is a different record, so the holder starts from an empty value: it drops the
+     * displayed data whenever the key changes, which is what keeps last year's measurements
+     * from sitting under a new year label.
      */
     fun selectYear(year: Int) {
         if (year == _state.value.selectedYear) return
-        specsJob?.cancel()
-        _state.update { it.copy(selectedYear = year, specs = ContentState(isLoading = true)) }
+        _state.update { it.copy(selectedYear = year) }
         if (_state.value.selectedModel != null) loadSpecs()
     }
 
     /** Reloads the specifications of the open model; no-op when no model is open. */
     fun reloadSpecs() {
         if (_state.value.selectedModel == null) return
-        specsJob?.cancel()
-        _state.update { it.copy(specs = it.specs.copy(isLoading = true, error = null)) }
-        loadSpecs()
+        specsHolder.retry()
     }
 
     /**
@@ -178,14 +177,12 @@ class CarsViewModel(
      */
     fun clearCache() {
         viewModelScope.launch {
-            repository.clearCache()
+            makesHolder.clearCache()
+            modelsHolder.clearCache()
+            specsHolder.clearCache()
             cacheLog.clear()
             lastEffectId = 0
 
-            modelsJob?.cancel()
-            specsJob?.cancel()
-            modelsJob = null
-            specsJob = null
             _state.update {
                 it.copy(selectedMake = null, selectedModel = null, models = ContentState(), specs = ContentState())
             }
@@ -193,52 +190,30 @@ class CarsViewModel(
         }
     }
 
-    private fun loadModels(make: CarMake) {
-        modelsJob = viewModelScope.launch {
-            repository.models(make.name).collect { result ->
-                _state.update { state -> state.copy(models = state.models.folded(result)) }
-            }
-        }
-    }
-
     private fun loadSpecs() {
         val make = _state.value.selectedMake ?: return
         val model = _state.value.selectedModel ?: return
-        val year = _state.value.selectedYear
+        specsHolder.read(repository.specsRequest(make.name, model.name, _state.value.selectedYear))
+    }
 
-        specsJob = viewModelScope.launch {
-            repository.specs(makeName = make.name, modelName = model.name, year = year).collect { result ->
-                _state.update { state -> state.copy(specs = state.specs.folded(result)) }
-            }
-        }
+    /** Performs a request the repository defined, keeping this class free of cache policy. */
+    private fun <K, V> KacheStateHolder<K, V>.read(request: CacheRequest<K, V>) {
+        load(request.key, request.fetch, request.strategy)
     }
 
     /**
-     * Folds one library result into the list state.
+     * Projects the library's view state onto the list state the screen renders.
      *
-     * A failure that carries a fallback keeps the fallback on screen: replacing usable rows
-     * with an error would be a worse outcome than showing them with a warning.
+     * The library keeps the failure typed, because a caller may need to distinguish a network
+     * error from a corrupt record; the screen renders one message, so the translation happens
+     * here, once.
      */
-    private fun <T> ContentState<T>.folded(result: CacheResult<List<T>>): ContentState<T> = when (result) {
-        is CacheResult.Loading -> copy(
-            items = result.cachedData ?: items,
-            isLoading = true,
-            error = null,
-        )
-
-        is CacheResult.Success -> ContentState(
-            items = result.data,
-            origin = result.origin,
-            isLoading = false,
-            error = null,
-        )
-
-        is CacheResult.Error -> copy(
-            items = result.cachedData ?: items,
-            isLoading = false,
-            error = result.error.toUserMessage(),
-        )
-    }
+    private fun <T> CachedState<List<T>>.content(): ContentState<T> = ContentState(
+        items = data.orEmpty(),
+        origin = origin,
+        isLoading = isLoading,
+        error = error?.toUserMessage(),
+    )
 
     companion object {
         private const val EFFECTS_BUFFER = 16

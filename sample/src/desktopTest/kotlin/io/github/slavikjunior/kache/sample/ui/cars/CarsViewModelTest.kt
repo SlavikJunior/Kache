@@ -1,8 +1,8 @@
 package io.github.slavikjunior.kache.sample.ui.cars
 
 import io.github.slavikjunior.kache.core.CacheOrigin
-import io.github.slavikjunior.kache.core.CacheResult
-import io.github.slavikjunior.kache.core.KacheException
+import io.github.slavikjunior.kache.core.CacheStrategy
+import io.github.slavikjunior.kache.core.KmpCache
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEvent
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEventKind
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEventLog
@@ -11,17 +11,19 @@ import io.github.slavikjunior.kache.sample.domain.model.CarModel
 import io.github.slavikjunior.kache.sample.domain.model.CarSpec
 import io.github.slavikjunior.kache.sample.domain.model.CarSpecSheet
 import io.github.slavikjunior.kache.sample.domain.model.LATEST_SPEC_YEAR
+import io.github.slavikjunior.kache.sample.domain.repository.CacheRequest
 import io.github.slavikjunior.kache.sample.domain.repository.CarRepository
+import io.github.slavikjunior.kache.sample.testutil.testCache
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -30,12 +32,14 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Covers the state machine: what each user action does to [CarsUiState].
+ * Covers the screen graph: what each user action does to [CarsUiState], with reads performed
+ * by the library's `KacheStateHolder` over real caches.
  *
  * JVM-only on purpose. The ViewModel drives `viewModelScope`, which runs on
  * `Dispatchers.Main`; overriding Main with a test dispatcher is a JVM facility, so these
- * tests live in `desktopTest` rather than in `commonTest`. The shared logic they depend on
- * (repository, log, mappers) is covered by `commonTest` on every platform.
+ * tests live in `desktopTest` rather than in `commonTest`. The pieces they depend on that are
+ * platform-independent — the holder, the log, the mappers — are covered in `commonTest` and
+ * in `:cache-core`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CarsViewModelTest {
@@ -66,13 +70,30 @@ class CarsViewModelTest {
         assertEquals(listOf("HONDA", "TESLA"), makes.items.map { it.name })
         assertEquals(CacheOrigin.NETWORK, makes.origin)
         assertTrue(!makes.isLoading)
+        assertNull(makes.error)
+    }
+
+    @Test
+    fun aRefreshKeepsTheCatalogueOnScreenWhileTheNetworkIsBusy() = runTest(dispatcher.scheduler) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        repository.fetchDelayMillis = 1_000
+
+        viewModel.loadMakes(refresh = true)
+        testScheduler.runCurrent()
+
+        val makes = viewModel.state.value.makes
+        assertEquals(
+            listOf("HONDA", "TESLA"),
+            makes.items.map { it.name },
+            "a refresh dims the screen, it does not blank it",
+        )
+        assertTrue(makes.isLoading, "the holder reports the read as in flight")
     }
 
     @Test
     fun aFailureWithoutDataBecomesAMessageOnScreen() = runTest(dispatcher.scheduler) {
-        repository.makesResult = CacheResult.Error(
-            KacheException.NetworkException(IllegalStateException("offline")),
-        )
+        repository.failure = IllegalStateException("offline")
 
         val viewModel = viewModel()
         advanceUntilIdle()
@@ -80,6 +101,7 @@ class CarsViewModelTest {
         val makes = viewModel.state.value.makes
         assertEquals("Network request failed", makes.error)
         assertTrue(makes.items.isEmpty())
+        assertTrue(!makes.isLoading, "a failed read must stop the spinner")
     }
 
     @Test
@@ -100,6 +122,7 @@ class CarsViewModelTest {
         assertNull(state.selectedModel, "opening a make must close the model below it")
         assertEquals(listOf("Civic"), state.models.items.map { it.name })
         assertTrue(state.specs.items.isEmpty())
+        assertEquals("HONDA", repository.lastModelsMake)
     }
 
     @Test
@@ -127,16 +150,30 @@ class CarsViewModelTest {
         advanceUntilIdle()
 
         val target = LATEST_SPEC_YEAR - 5
-        repository.specsResult = CacheResult.Success(emptyList(), CacheOrigin.NETWORK)
+        repository.specs = emptyList()
         viewModel.selectYear(target)
         advanceUntilIdle()
 
-        assertEquals(target, viewModel.state.value.selectedYear)
+        val state = viewModel.state.value
+        assertEquals(target, state.selectedYear)
         assertEquals(target, repository.lastSpecsYear)
-        assertTrue(
-            viewModel.state.value.specs.items.isEmpty(),
-            "last year's measurements must not survive under a new year label",
-        )
+        assertTrue(state.specs.items.isEmpty(), "last year's measurements must not survive a new year label")
+        assertEquals(CacheOrigin.NETWORK, state.specs.origin, "the new year is a different record")
+    }
+
+    @Test
+    fun reloadingRepeatsTheRequestThatProducedTheScreen() = runTest(dispatcher.scheduler) {
+        val viewModel = viewModel()
+        advanceUntilIdle()
+        viewModel.selectMake(CarMake(id = 474, name = "HONDA"))
+        advanceUntilIdle()
+        assertEquals(1, repository.modelsFetches)
+
+        viewModel.reloadModels()
+        advanceUntilIdle()
+
+        assertEquals(2, repository.modelsFetches)
+        assertEquals("HONDA", repository.lastModelsMake, "a retry must not drift to another key")
     }
 
     @Test
@@ -160,20 +197,19 @@ class CarsViewModelTest {
     }
 
     @Test
-    fun clearCacheEmptiesTheLogAndReloads() = runTest(dispatcher.scheduler) {
+    fun clearCacheEmptiesStorageTheLogAndReloads() = runTest(dispatcher.scheduler) {
         val viewModel = viewModel()
         advanceUntilIdle()
-        log.onMiss("cars:makes", io.github.slavikjunior.kache.core.CacheStrategy.CacheFirst)
+        log.onMiss("cars:makes", CacheStrategy.CacheFirst)
         advanceUntilIdle()
         assertTrue(viewModel.state.value.log.isNotEmpty())
 
         viewModel.clearCache()
         advanceUntilIdle()
 
-        assertEquals(1, repository.clearCalls)
         assertTrue(viewModel.state.value.log.isEmpty(), "a cleared cache starts its log over")
         assertEquals(0, viewModel.state.value.counters.hits)
-        assertEquals(2, repository.makesCalls, "the catalogue is reloaded after a clear")
+        assertEquals(2, repository.makesFetches, "the catalogue is re-read after a clear")
     }
 
     @Test
@@ -185,7 +221,7 @@ class CarsViewModelTest {
         val collector = launch { viewModel.effects.collect { effects += it } }
         advanceUntilIdle()
 
-        log.onMiss("cars:makes", io.github.slavikjunior.kache.core.CacheStrategy.CacheFirst)
+        log.onMiss("cars:makes", CacheStrategy.CacheFirst)
         log.onFetch("cars:makes", attempt = 1)
         advanceUntilIdle()
 
@@ -194,68 +230,76 @@ class CarsViewModelTest {
 
         collector.cancel()
     }
-
-    @Test
-    fun aStaleSuccessKeepsItsOriginSoTheBadgeTellsTheTruth() = runTest(dispatcher.scheduler) {
-        repository.modelsResult = CacheResult.Success(
-            data = listOf(CarModel(id = 1, name = "Civic")),
-            origin = CacheOrigin.DISK_STALE,
-        )
-
-        val viewModel = viewModel()
-        advanceUntilIdle()
-        viewModel.selectMake(viewModel.state.value.makes.items.first())
-        advanceUntilIdle()
-
-        assertEquals(CacheOrigin.DISK_STALE, viewModel.state.value.models.origin)
-    }
 }
 
-/** Repository double: answers from configured results and records what it was asked. */
-private class FakeCarRepository : CarRepository {
+/** Repository double: real caches, configured fetchers, recorded calls. */
+private class FakeCarRepository(
+    override val makesCache: KmpCache<String, List<CarMake>> = testCache(ListSerializer(CarMake.serializer())),
+    override val modelsCache: KmpCache<String, List<CarModel>> = testCache(ListSerializer(CarModel.serializer())),
+    override val specsCache: KmpCache<String, List<CarSpecSheet>> = testCache(ListSerializer(CarSpecSheet.serializer())),
+) : CarRepository {
 
-    var makesResult: CacheResult<List<CarMake>> = CacheResult.Success(
-        data = listOf(CarMake(id = 474, name = "HONDA"), CarMake(id = 441, name = "TESLA")),
-        origin = CacheOrigin.NETWORK,
-    )
-    var modelsResult: CacheResult<List<CarModel>> = CacheResult.Success(
-        data = listOf(CarModel(id = 1863, name = "Civic")),
-        origin = CacheOrigin.NETWORK,
-    )
-    var specsResult: CacheResult<List<CarSpecSheet>> = CacheResult.Success(
-        data = listOf(
-            CarSpecSheet(
-                trim = "ACCORD",
-                dataYear = "26",
-                specs = listOf(CarSpec(label = "Overall length", value = "480", unit = "cm")),
-            ),
+    var makes: List<CarMake> = listOf(CarMake(id = 474, name = "HONDA"), CarMake(id = 441, name = "TESLA"))
+    var models: List<CarModel> = listOf(CarModel(id = 1863, name = "Civic"))
+    var specs: List<CarSpecSheet> = listOf(
+        CarSpecSheet(
+            trim = "ACCORD",
+            dataYear = "26",
+            specs = listOf(CarSpec(label = "Overall length", value = "480", unit = "cm")),
         ),
-        origin = CacheOrigin.NETWORK,
     )
 
-    var makesCalls: Int = 0
+    /** When set, every fetcher throws it — the offline case. */
+    var failure: Throwable? = null
+
+    /** Makes the makes fetcher suspend, so a test can observe the in-flight state. */
+    var fetchDelayMillis: Long = 0
+
+    var makesFetches: Int = 0
         private set
-    var clearCalls: Int = 0
+    var modelsFetches: Int = 0
+        private set
+    var lastModelsMake: String? = null
         private set
     var lastSpecsYear: Int? = null
         private set
     var lastSpecsModel: String? = null
         private set
 
-    override fun makes(refresh: Boolean): Flow<CacheResult<List<CarMake>>> {
-        makesCalls++
-        return flowOf(makesResult)
-    }
+    override fun makesRequest(refresh: Boolean): CacheRequest<String, List<CarMake>> = CacheRequest(
+        key = "cars:makes",
+        strategy = if (refresh) CacheStrategy.CacheAndNetwork else CacheStrategy.CacheFirst,
+        fetch = {
+            makesFetches++
+            if (fetchDelayMillis > 0) delay(fetchDelayMillis)
+            failure?.let { throw it }
+            makes.sortedBy(CarMake::name)
+        },
+    )
 
-    override fun models(makeName: String): Flow<CacheResult<List<CarModel>>> = flowOf(modelsResult)
+    override fun modelsRequest(makeName: String): CacheRequest<String, List<CarModel>> = CacheRequest(
+        key = "cars:models:${makeName.lowercase()}",
+        strategy = CacheStrategy.NetworkFirst,
+        fetch = {
+            modelsFetches++
+            lastModelsMake = makeName
+            failure?.let { throw it }
+            models
+        },
+    )
 
-    override fun specs(makeName: String, modelName: String, year: Int): Flow<CacheResult<List<CarSpecSheet>>> {
-        lastSpecsYear = year
-        lastSpecsModel = modelName
-        return flowOf(specsResult)
-    }
-
-    override suspend fun clearCache() {
-        clearCalls++
-    }
+    override fun specsRequest(
+        makeName: String,
+        modelName: String,
+        year: Int,
+    ): CacheRequest<String, List<CarSpecSheet>> = CacheRequest(
+        key = "cars:specs:$year:${makeName.lowercase()}:${modelName.lowercase()}",
+        strategy = CacheStrategy.StaleWhileRevalidate,
+        fetch = {
+            lastSpecsYear = year
+            lastSpecsModel = modelName
+            failure?.let { throw it }
+            specs
+        },
+    )
 }

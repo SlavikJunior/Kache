@@ -4,10 +4,10 @@ import android.content.Context
 import io.github.slavikjunior.kache.android.l2Cache
 import io.github.slavikjunior.kache.sample.core.cachelog.CacheEventLog
 import io.github.slavikjunior.kache.sample.data.remote.NhtsaApi
-import io.github.slavikjunior.kache.sample.data.remote.dto.CanadianSpecsDto
-import io.github.slavikjunior.kache.sample.data.remote.dto.MakeDto
-import io.github.slavikjunior.kache.sample.data.remote.dto.ModelDto
 import io.github.slavikjunior.kache.sample.data.repository.DefaultCarRepository
+import io.github.slavikjunior.kache.sample.domain.model.CarMake
+import io.github.slavikjunior.kache.sample.domain.model.CarModel
+import io.github.slavikjunior.kache.sample.domain.model.CarSpecSheet
 import io.github.slavikjunior.kache.storage.KotlinxJsonSerializer
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
@@ -32,7 +32,7 @@ fun createAppContainer(context: Context): AppContainer {
 
     val makesCache = l2Cache(
         context = context,
-        serializer = KotlinxJsonSerializer(ListSerializer(MakeDto.serializer())),
+        serializer = KotlinxJsonSerializer(ListSerializer(CarMake.serializer())),
         defaultTtl = CacheTtls.MAKES,
         cacheDirName = CacheNames.MAKES,
         logger = log,
@@ -40,7 +40,7 @@ fun createAppContainer(context: Context): AppContainer {
 
     val modelsCache = l2Cache(
         context = context,
-        serializer = KotlinxJsonSerializer(ListSerializer(ModelDto.serializer())),
+        serializer = KotlinxJsonSerializer(ListSerializer(CarModel.serializer())),
         defaultTtl = CacheTtls.MODELS,
         cacheDirName = CacheNames.MODELS,
         retryPolicy = MODELS_RETRY,
@@ -50,7 +50,7 @@ fun createAppContainer(context: Context): AppContainer {
 
     val specsCache = l2Cache(
         context = context,
-        serializer = KotlinxJsonSerializer(ListSerializer(CanadianSpecsDto.serializer())),
+        serializer = KotlinxJsonSerializer(ListSerializer(CarSpecSheet.serializer())),
         defaultTtl = CacheTtls.SPECS,
         cacheDirName = CacheNames.SPECS,
         maxSize = CacheLimits.SPECS_RECORDS,
