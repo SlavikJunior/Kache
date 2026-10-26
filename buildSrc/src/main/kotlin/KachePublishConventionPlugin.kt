@@ -21,9 +21,9 @@ import org.gradle.plugins.signing.SigningExtension
  * jars (`jvmSourcesJar`, `androidSourcesJar`, `ios*SourcesJar`). Nothing needs attaching
  * here beyond the Dokka artifact.
  *
- * Adds `dokkaJar` — a `javadoc`-classified JAR packaging the Dokka HTML output. Maven Central
- * requires a Javadoc artifact per publication and the Dokka plugin does not create one on its
- * own. Sources jars are the KMP plugin's job and are left alone.
+ * Adds a `javadoc`-classified JAR per publication, packaging the Dokka HTML output. Maven
+ * Central requires a javadoc artifact for every publication and the Dokka plugin does not create
+ * one on its own. Sources jars are the KMP plugin's job and are left alone.
  *
  * Signing is controlled by `SIGNING_KEY` and `SIGNING_PASSWORD` (Gradle properties
  * or environment variables). When either is absent, signing is not required, which
@@ -40,10 +40,6 @@ class KachePublishConventionPlugin : Plugin<Project> {
 
         group = findProperty("GROUP") as String
         version = findProperty("VERSION_NAME") as String
-
-        // Registered once per module: calling this from inside the
-        // publications loop would attempt to re-register the same task name.
-        val dokkaJar = registerDokkaJar()
 
         // Resolved here, in Project scope: inside the publishing block the receiver is
         // RepositoryHandler, not Project.
@@ -82,7 +78,7 @@ class KachePublishConventionPlugin : Plugin<Project> {
                     }
                 }
 
-                artifact(dokkaJar)
+                artifact(target.registerJavadocJar(name))
             }
 
             repositories {
@@ -116,20 +112,29 @@ class KachePublishConventionPlugin : Plugin<Project> {
         configureSigning()
     }
 
-    /** Dokka HTML output packaged as the `javadoc` artifact. */
-    private fun Project.registerDokkaJar(): TaskProvider<Jar> {
-        if (tasks.names.contains(DOKKA_JAR_TASK)) {
-            return tasks.named(DOKKA_JAR_TASK, Jar::class.java)
-        }
-
-        return tasks.register(DOKKA_JAR_TASK, Jar::class.java) {
+    /**
+     * Dokka HTML packaged as the `javadoc` artifact of one publication.
+     *
+     * Every publication gets its own Jar task, and that is load-bearing. A single Jar shared by
+     * all publications puts one file on disk into several publications, so the signing plugin
+     * writes one `<file>.asc` from two different `Sign` tasks; Gradle 9 then rejects the publish
+     * task with "Property has implicit dependency", because it consumes a file produced by a
+     * Sign task it does not depend on. Distinct files give each publication its own signature.
+     *
+     * The name on disk does not leak into the coordinates: maven-publish renames artifacts to
+     * `<artifactId>-<version>[-<classifier>].<extension>` when uploading.
+     */
+    private fun Project.registerJavadocJar(publicationName: String): TaskProvider<Jar> =
+        tasks.register("${publicationName}JavadocJar", Jar::class.java) {
+            group = "documentation"
+            description = "Dokka HTML packaged as the javadoc artifact of '$publicationName'."
+            archiveBaseName.set("${project.name}-${project.version}-$publicationName")
             archiveClassifier.set("javadoc")
             from(layout.buildDirectory.dir(DOKKA_OUTPUT_DIR))
-            // The Dokka task name varies across plugin variants, so depend on all
-            // of them rather than on a specific task type.
+            // The Dokka task name varies across plugin variants, so depend on all of them
+            // rather than on a specific task type.
             dependsOn(tasks.matching { it.name in DOKKA_TASK_NAMES })
         }
-    }
 
     private fun Project.configureSigning() {
         val signingKey = providers.gradleProperty(SIGNING_KEY_PROPERTY).orNull
@@ -158,7 +163,6 @@ class KachePublishConventionPlugin : Plugin<Project> {
     }
 
     private companion object {
-        const val DOKKA_JAR_TASK = "dokkaJar"
         const val DOKKA_OUTPUT_DIR = "dokka/html"
 
         /** Dokka V2 tasks that produce the HTML output under `build/dokka/html`. */
