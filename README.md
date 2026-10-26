@@ -15,7 +15,7 @@
 **English** · [Русский](README.ru.md)
 
 </div>
-[![Maven Central](https://img.shields.io/badge/maven--central-not%20published%20yet-lightgrey)](#project-status)
+[![Maven Central](https://img.shields.io/badge/maven--central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Kotlin Multiplatform cache with two tiers, a reactive strategy pipeline, and one API that
@@ -103,8 +103,8 @@ There are good general-purpose caches. The gap this fills is narrower:
 > variant because `androidx.sqlite` 2.7.1 does not publish one, so the dependency cannot
 > resolve for that target. `:cache-core` does support `iosX64`.
 
-`0.1.0` is verified against a local Maven repository only. The coordinates are not yet
-resolvable from `mavenCentral()`; see [Project status](#project-status).
+`0.1.0` is published to Maven Central. The artifacts are signed and resolve from
+`mavenCentral()`; see [Project status](#project-status).
 
 ## Installation
 
@@ -812,10 +812,8 @@ contract as the host and iOS ones.
 - **`KacheException.ExpiredException` was removed.** Nothing ever threw it, and it was the one
   exception that put a caller-supplied key into `message` and `toString`. An expired record is
   a miss, not an error. A consumer that caught it will not compile.
-- Not yet published to Maven Central. The remaining manual steps — the GPG key, namespace
-  verification and the Portal User Token — are tracked in
-  [`docs/BACKLOG.md`](docs/BACKLOG.md) and
-  [`docs/specs/03_platform_coverage_and_release_spec.md`](docs/specs/03_platform_coverage_and_release_spec.md).
+- Published to Maven Central as `0.1.0`. The release procedure, including the steps that are easy
+  to get wrong, is documented in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## License
 

@@ -7,7 +7,7 @@ minor release may contain breaking changes; each one is listed with what a consu
 
 ## [Unreleased]
 
-## [0.1.0] — not yet published
+## [0.1.0] — 2026-10-26
 
 First release. Coordinates are `io.github.slavikjunior.kache:cache-core`, `cache-storage`,
 `cache-store-room` and `cache-android`.

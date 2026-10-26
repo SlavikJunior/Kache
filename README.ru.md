@@ -15,7 +15,7 @@
 [English](README.md) · **Русский**
 
 </div>
-[![Maven Central](https://img.shields.io/badge/maven--central-not%20published%20yet-lightgrey)](#статус-проекта)
+[![Maven Central](https://img.shields.io/badge/maven--central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Кэш для Kotlin Multiplatform с двумя уровнями, реактивным пайплайном стратегий и одним API,
@@ -104,8 +104,8 @@ cache.get(
 > потому что `androidx.sqlite` 2.7.1 его не публикует и зависимость не разрешается для
 > этого таргета. У `:cache-core` вариант `iosX64` есть.
 
-Версия `0.1.0` проверена только на локальном Maven-репозитории. Координаты пока не
-разрешаются из `mavenCentral()` — см. [Статус проекта](#статус-проекта).
+Версия `0.1.0` опубликована в Maven Central. Артефакты подписаны и разрешаются из
+`mavenCentral()` — см. [Статус проекта](#статус-проекта).
 
 ## Установка
 
@@ -812,9 +812,8 @@ bundled-драйвер SQLite:
 - **`KacheException.ExpiredException` удалён.** Его никто не бросал, и это было единственное
   исключение, клавившее ключ кэша в `message` и `toString`. Просроченная запись — это промах,
   а не ошибка. Потребитель, который его ловил, не скомпилируется.
-- Публикации в Maven Central пока нет. Оставшиеся ручные шаги — GPG-ключ, верификация
-  пространства имён и Portal User Token — ведутся в [`docs/BACKLOG.md`](docs/BACKLOG.md) и
-  [`docs/specs/03_platform_coverage_and_release_spec.md`](docs/specs/03_platform_coverage_and_release_spec.md).
+- Опубликовано в Maven Central как `0.1.0`. Процедура релиза, включая шаги, на которых легко
+  ошибиться, описана в [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Лицензия
 
