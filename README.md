@@ -15,7 +15,7 @@
 **English** · [Русский](README.ru.md)
 
 </div>
-[![Maven Central](https://img.shields.io/badge/maven--central-0.1.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
+[![Maven Central](https://img.shields.io/badge/maven--central-1.0.0-blue)](https://central.sonatype.com/artifact/io.github.slavikjunior.kache/cache-core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Kotlin Multiplatform cache with two tiers, a reactive strategy pipeline, and one API that
@@ -113,7 +113,7 @@ There are good general-purpose caches. The gap this fills is narrower:
 > iOS this means a durable L2 without Room; `:cache-store-room` remains the choice when you
 > want queries and migrations.
 
-`0.1.0` is published to Maven Central. The artifacts are signed and resolve from
+`1.0.0` is published to Maven Central. The artifacts are signed and resolve from
 `mavenCentral()`; see [Project status](#project-status).
 
 ## Installation
@@ -134,11 +134,11 @@ Then pick the modules you need. `cache-core` is the only mandatory one.
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
+            implementation("io.github.slavikjunior.kache:cache-core:1.0.0")
 
             // Optional L2 backends. Both expose a StorageEngine; take the one that fits.
-            implementation("io.github.slavikjunior.kache:cache-storage:0.1.0")   // JVM/Android
-            implementation("io.github.slavikjunior.kache:cache-store-room:0.1.0") // JVM/Android/iOS
+            implementation("io.github.slavikjunior.kache:cache-storage:1.0.0")   // JVM/Android/iOS
+            implementation("io.github.slavikjunior.kache:cache-store-room:1.0.0") // JVM/Android/iOS
         }
     }
 }
@@ -150,8 +150,8 @@ required on your side):
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.slavikjunior.kache:cache-core:0.1.0")
-    implementation("io.github.slavikjunior.kache:cache-android:0.1.0")
+    implementation("io.github.slavikjunior.kache:cache-core:1.0.0")
+    implementation("io.github.slavikjunior.kache:cache-android:1.0.0")
 }
 ```
 
@@ -169,10 +169,11 @@ reach your classpath are `kotlin-stdlib` and `kotlinx-coroutines`; an L2 backend
 | `compileSdk` | **36 or newer** | Every library module records `compileSdk 36` in its AAR metadata, and AGP refuses to consume an AAR built against a newer API than the consumer compiles against. |
 | `minSdk` | **23** | The floor declared by all four artifacts. |
 | Gradle | **9.x** | The build runs on 9.6.1 and publishes standard Gradle Module Metadata. |
-| iOS targets | `:cache-core` — `iosArm64`, `iosSimulatorArm64`, `iosX64`; `:cache-store-room` — `iosArm64`, `iosSimulatorArm64` only | There is no `iosX64` variant of `androidx.sqlite` 2.7.1, so a project with an `iosX64` target must keep `:cache-store-room` out of `commonMain`. |
+| iOS targets | `:cache-core` — `iosArm64`, `iosSimulatorArm64`, `iosX64`; `:cache-storage` — `iosArm64`, `iosSimulatorArm64`; `:cache-store-room` — `iosArm64`, `iosSimulatorArm64` only | There is no `iosX64` variant of `androidx.sqlite` 2.7.1, so a project with an `iosX64` target must keep `:cache-store-room` out of `commonMain`. |
 
-`:cache-storage` is jvm/android-only, so it belongs in `jvmMain`/`androidMain`, never in the
-`commonMain` of a project that also targets iOS.
+`:cache-storage` publishes `iosArm64` and `iosSimulatorArm64` as well, so it belongs in
+`commonMain`. On iOS it carries the serializers and the file engine; the engine's platform entry
+point is `createFromCachesDirectory` there and `createFromContext` on Android.
 
 Requires `minSdk 23`.
 
@@ -308,8 +309,9 @@ the `l2Cache` factory below.
 
 ### 3. Persistent Room cache (JVM / Android / iOS)
 
-Useful when you want an indexable store, or when the cache has to live on a platform where
-a plain file API is awkward. On iOS this is the **only** L2 backend.
+Useful when you want an indexable store, migrations, or SQL. On iOS it is one of two L2
+backends: take this one when you need queries or a schema, and the file engine when durable
+key/value storage is all you want.
 
 ```kotlin
 // JVM: a file path whose parent directory already exists
@@ -591,7 +593,7 @@ already expired, so it is not an eviction: nothing was given up to make room.
 |---|---|
 | Memory only, or a shared UI cache | `L1MemoryCache` |
 | Fast local disk, one file per key, no schema | `:cache-storage` (`FileStorageEngine`) |
-| Indexed storage, migrations, or the only option on iOS | `:cache-store-room` (Room) |
+| Indexed storage, migrations, or SQL on iOS | `:cache-store-room` (Room) |
 | Memory in front of disk | `ChainKmpCache` + any `StorageEngine` |
 
 ### Implementing your own backend
@@ -858,18 +860,22 @@ plus 10 ViewModel tests that need a JVM `Dispatchers.Main` override.
   write time until they are read again. Backfilling rather than leaving the column default keeps
   an upgraded cache from treating every pre-existing row as the least recently used one and
   throwing the lot away on the first eviction.
-- **An existing file cache survives the header change.** The on-disk record gained a field, so
-  the decoder now reads two layouts. It tells them apart by a leading version marker rather than
-  by counting separators, which cannot work: the payload is arbitrary binary that may itself
-  contain the separator byte. A legacy record is read with its access time set to its creation
-  time — the same backfill the database migration performs — so records written by either layout
-  rank identically until they are read again. A file from a *future* layout, or from a different
+- **A file cache written by `0.1.0` survives the upgrade.** Neither the key → filename mapping
+  nor the on-disk header changed between `0.1.0` and `1.0.0`, so an app that upgrades keeps
+  reading what it wrote. The decoder still reads the layout that predates access tracking: it
+  tells the two apart by a leading version marker rather than by counting separators, which
+  cannot work because the payload is arbitrary binary that may itself contain the separator
+  byte. A legacy record is read with its access time set to its creation time — the same
+  backfill the database migration performs — so records written by either layout rank
+  identically until they are read again. A file from a *future* layout, or from a different
   format entirely, is discarded rather than guessed at, since a cache directory is disposable.
-- **An existing file cache is not read after an upgrade.** The security audit replaced the
-  key → filename mapping, because the old one was lossy and could not be inverted, so two
-  different keys could collide onto one record. Old files are neither read nor migrated; they
-  are dead weight in the cache directory until it is cleared. That is the correct trade for a
-  cache, but it is a one-way door.
+- **A file cache written before `0.1.0` is not read after an upgrade.** The pre-release security
+  audit replaced the key → filename mapping, because the old one was lossy and could not be
+  inverted, so two different keys could collide onto one record. Files named by the old mapping
+  are neither read nor migrated; they are dead weight in the cache directory until it is
+  cleared. No published version ever wrote them — `0.1.0` already uses the reversible
+  encoding — so for a consumer this is history rather than an upgrade path. For a cache it was
+  the right trade, and it is a one-way door.
 - **`KacheException.ExpiredException` was removed.** Nothing ever threw it, and it was the one
   exception that put a caller-supplied key into `message` and `toString`. An expired record is
   a miss, not an error. A consumer that caught it will not compile.

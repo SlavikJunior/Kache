@@ -2,17 +2,16 @@
 
 ## Supported versions
 
-Kache is pre-1.0. Security fixes land on `main` and are released as patch versions of the
-most recent published line. Only that line is supported.
+Kache is 1.x. Security fixes land on `main` and are released as patch versions of the most
+recent published line. Only that line is supported.
 
 | Version | Supported |
 |---|---|
-| 0.1.x | yes, once published |
+| 1.0.x | yes |
 | anything older | no |
 
-**No release has been published yet.** `0.1.0` exists only in a local repository, and every
-finding from the pre-release audit is already fixed on `main`. Reports against `main` are
-welcome and are treated as reports against the upcoming release.
+`1.0.0` is published to Maven Central, and every finding from the pre-release audit is fixed in
+it. Reports against `main` are welcome and are treated as reports against the next release.
 
 ## Reporting a vulnerability
 
@@ -47,9 +46,15 @@ reviewer can see. Documentation artifacts (`-sources`, `-javadoc` and their vari
 trusted by name instead: they never reach a compile or runtime classpath and exist only for IDE
 indexing. That exception is deliberate and is stated in the file next to the rules.
 
-These are checksums, not signatures. The project has no GPG key, so a published artifact
-whose bytes match a recorded hash would pass verification. Signing the release artifacts is on
-the list of remaining work before the first publication.
+These are checksums, not signatures: they prove an artifact has not changed, not who produced
+it. Origin is covered separately — release artifacts are signed with the maintainer's GPG key
+(fingerprint `DA04787CEA27F2D6`, published on `keyserver.ubuntu.com`), and every uploaded file
+has a `.asc` beside it:
+
+```bash
+gpg --recv-keys DA04787CEA27F2D6
+gpg --verify cache-core-1.0.0.pom.asc cache-core-1.0.0.pom
+```
 
 ## Scope
 
